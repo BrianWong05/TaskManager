@@ -8,3 +8,4 @@
 #include <sys/proc_info.h>
 #include <sys/types.h>
 #include <signal.h>
+#include <utmpx.h>

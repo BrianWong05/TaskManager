@@ -46,6 +46,7 @@ final class AppModel: ObservableObject {
     let snapshotStore: ProcessSnapshotStore
     let systemStore = SystemMetricsStore()
     let settings = SettingsStore()
+    let startupStore: StartupStore
 
     /// Set by the Mini monitor to select a process once the main window
     /// shows (spec §3.8 panel top-process click).
@@ -60,6 +61,7 @@ final class AppModel: ObservableObject {
         // the batched cross-user detail fill (spec §4.4).
         snapshotStore = ProcessSnapshotStore(
             sampler: SamplerActor(elevatedDetailSource: elevation.client))
+        startupStore = StartupStore(elevation: elevation)
         snapshotStore.start { [weak systemStore] sample in
             systemStore?.apply(sample)
         }
