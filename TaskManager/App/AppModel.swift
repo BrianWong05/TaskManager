@@ -3,6 +3,7 @@
 
 import Foundation
 import Combine
+import AppKit
 
 /// The five navigation destinations of the main window (spec §3.2).
 enum MainTab: String, CaseIterable, Identifiable {
@@ -42,15 +43,40 @@ final class AppModel: ObservableObject {
     /// Single data source shared by the main window and the Mini monitor
     /// (spec §4.3). Sampling starts once with the app.
     let snapshotStore = ProcessSnapshotStore()
+    let systemStore = SystemMetricsStore()
+    let settings = SettingsStore()
+
+    /// Set by the Mini monitor to select a process once the main window
+    /// shows (spec §3.8 panel top-process click).
+    @Published var pendingProcessSelection: ProcessSelection?
+
+    private(set) var miniMonitor: MiniMonitorController?
 
     init() {
         let stored = UserDefaults.standard.string(forKey: "selectedTab")
         selectedTab = stored.flatMap(MainTab.init(rawValue:)) ?? .processes
-        snapshotStore.start()
+        snapshotStore.start { [weak systemStore] sample in
+            systemStore?.apply(sample)
+        }
+        let monitor = MiniMonitorController()
+        monitor.attach(appModel: self)
+        miniMonitor = monitor
     }
 
     func select(_ tab: MainTab) {
         selectedTab = tab
         UserDefaults.standard.set(tab.rawValue, forKey: "selectedTab")
+    }
+
+    /// Open (or refocus) the main window, optionally selecting a process.
+    func openMainWindow(selecting selection: ProcessSelection? = nil) {
+        if let selection {
+            pendingProcessSelection = selection
+            select(.processes)
+        }
+        if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
+            window.makeKeyAndOrderFront(nil)
+        }
+        NSApp.activate(ignoringOtherApps: true)
     }
 }

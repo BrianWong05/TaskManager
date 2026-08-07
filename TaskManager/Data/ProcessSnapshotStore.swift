@@ -16,10 +16,13 @@ final class ProcessSnapshotStore: ObservableObject {
         self.sampler = sampler
     }
 
-    func start() {
+    func start(onSystemSample: @escaping @MainActor (SystemSample) -> Void = { _ in }) {
         Task {
-            await sampler.start { [weak self] snapshot in
+            await sampler.start { [weak self] snapshot, systemSample in
                 self?.apply(snapshot)
+                if let systemSample {
+                    onSystemSample(systemSample)
+                }
             }
         }
     }

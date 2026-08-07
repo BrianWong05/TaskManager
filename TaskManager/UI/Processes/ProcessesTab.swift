@@ -52,6 +52,19 @@ struct ProcessesTab: View {
         )
         // Esc: close inspector → clear search → deselect (spec §3.3).
         .onExitCommand(perform: handleEscape)
+        // Mini monitor hand-off: select the process requested from the
+        // menu-bar panel (spec §3.8).
+        .onReceive(appModel.$pendingProcessSelection) { pending in
+            guard let pending else { return }
+            viewModel.selection = pending
+            if case .process(let identity) = pending,
+               let snapshot,
+               let record = viewModel.record(for: identity, in: snapshot),
+               let bundle = record.bundlePath {
+                viewModel.expandedGroups.insert(bundle)
+            }
+            appModel.pendingProcessSelection = nil
+        }
         .alert(item: $viewModel.terminationError) { error in
             Alert(
                 title: Text("Cannot end \(error.processName) (\(error.pid))"),

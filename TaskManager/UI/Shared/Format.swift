@@ -38,4 +38,15 @@ enum Format {
         formatter.timeStyle = .medium
         return formatter.string(from: date)
     }
+
+    /// Up time as "3d 4h" / "5h 12m" / "23m".
+    static func upTime(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds)
+        let days = total / 86_400
+        let hours = (total % 86_400) / 3600
+        let minutes = (total % 3600) / 60
+        if days > 0 { return "\(days)d \(hours)h" }
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        return "\(minutes)m"
+    }
 }
