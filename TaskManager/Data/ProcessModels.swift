@@ -86,6 +86,9 @@ struct ProcessSnapshot: Sendable {
     var logicalCoreCount: Int
     /// Command lines filled by the daemon for cross-user processes (§4.4).
     var elevatedCommandLines: [Int32: String] = [:]
+    /// nettop failed 3+ ticks in a row: per-process network unavailable,
+    /// system-wide network only + notice (spec §4.5).
+    var networkDegraded: Bool = false
 
     var processCount: Int {
         backgroundProcesses.count + groups.reduce(0) { $0 + $1.children.count }

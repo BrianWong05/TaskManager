@@ -41,3 +41,18 @@ The app is signed with Xcode automatic signing under a **free personal Apple ID 
 5. The status bar clears and Elevation-dependent features are restored.
 
 If "Retry setup" keeps failing, open System Settings ▸ General ▸ Login Items & Extensions, remove any stale `com.brianwong.taskmanager.daemon` entry, then retry from step 4.
+
+## Manual acceptance checklist (spec §8)
+
+Privileged paths cannot be unit-tested; run these against a **signed** build (select your team first — ad-hoc builds always run degraded):
+
+1. Fresh install: first launch shows the guided setup sheet; approving registers the daemon (verify in System Settings ▸ Login Items).
+2. Decline setup: the app runs degraded — full process list visible, cross-user controls disabled with reasons, status bar present.
+3. Kill own process: End task terminates gracefully (no confirmation); Force Quit confirms then kills.
+4. Kill another user's/root process (daemon active): succeeds; `/Library/Application Support/TaskManager/audit.log` gains a line.
+5. SIP process (e.g. launchd): controls greyed, "Protected by the system".
+6. Disable the daemon in Login Items while running: the app transitions to degraded mode without crashing (within ~10 s).
+7. Signature-expiry simulation (let the free signature lapse, rebuild/re-sign, then Settings ▸ Retry setup): full function restored.
+8. nettop failure simulation (`sudo mv /usr/bin/nettop /usr/bin/nettop.bak`): Network column shows `–`, then the "system-wide network only" notice after 3 failures; restoring returns data on the next 5 s tick.
+9. Startup tab: user LaunchAgents toggle without prompts; system daemons toggle through the daemon; BTM items read-only with "Open System Settings".
+10. Menu-bar monitor toggle off hides the icon/panel; self-impact stays under budget (CPU <2 %, RAM <150 MB) with the window open.

@@ -26,6 +26,9 @@ struct ProcessesTab: View {
     var body: some View {
         VStack(spacing: 0) {
             toolbar
+            if snapshot?.networkDegraded == true {
+                networkDegradedNotice
+            }
             Divider().overlay(palette.border)
             columnHeader
             Divider().overlay(palette.border)
@@ -180,6 +183,22 @@ struct ProcessesTab: View {
         .onAppear {
             viewModel.elevation = appModel.elevation
         }
+    }
+
+    /// nettop failed 3+ ticks in a row (spec §4.5): system-wide network
+    /// remains on the Performance tab; per-process columns show `–`.
+    private var networkDegradedNotice: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "wifi.slash")
+                .font(.system(size: 10))
+            Text("Per-process network is unavailable — showing system-wide network only (Performance tab).")
+                .font(.system(size: 11))
+            Spacer()
+        }
+        .foregroundStyle(palette.textSecondary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
+        .background(palette.subdued)
     }
 
     // MARK: Column header

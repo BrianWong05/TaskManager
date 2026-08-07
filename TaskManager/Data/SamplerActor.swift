@@ -4,10 +4,14 @@
 // ProcessSnapshot per tick to the @MainActor store — one hop per tick.
 
 import Foundation
+import OSLog
 
 actor SamplerActor {
     static let tickInterval: TimeInterval = 1
+    static let degradedTickInterval: TimeInterval = 2 // self-impact guard (§4.2)
     static let nettopEveryNTicks = 5 // 5 s sub-tick (spec §4.2)
+    static let nettopFailureNoticeThreshold = 3 // spec §4.5
+    static let selfImpactBudgetPercent = 2.0    // spec §4.2
 
     private let processCollector: any ProcessTableCollecting
     private let nettopCollector: any NettopCollecting
@@ -18,6 +22,11 @@ actor SamplerActor {
     private var running = false
     private var tickCount = 0
     private var lastNet: [Int32: NetCounters]?
+    private var nettopConsecutiveFailures = 0
+    private var currentInterval: TimeInterval = SamplerActor.tickInterval
+    /// Self-impact bookkeeping: own cumulative CPU ns + timestamp.
+    private var ownPriorCPU: (ns: UInt64, usec: UInt64)?
+    private var overBudgetTicks = 0
     /// Prior cumulative counters for daemon-filled cross-user rows (by pid).
     private var elevatedPrior: [Int32: (cpuNS: UInt64, diskRead: UInt64, diskWrite: UInt64, usec: UInt64)] = [:]
 
@@ -43,7 +52,8 @@ actor SamplerActor {
             while !Task.isCancelled {
                 guard let self, await self.isRunning else { break }
                 await self.tick(publish: publish)
-                try? await Task.sleep(for: .seconds(Self.tickInterval))
+                let interval = await self.sleepInterval
+                try? await Task.sleep(for: .seconds(interval))
             }
         }
     }
@@ -53,12 +63,22 @@ actor SamplerActor {
     }
 
     var isRunning: Bool { running }
+    var sleepInterval: TimeInterval { currentInterval }
 
     private func tick(publish: @escaping @MainActor (ProcessSnapshot, SystemSample?) -> Void) async {
         tickCount += 1
+        checkSelfImpactBudget()
         // 5 s sub-tick: per-process network via nettop (spec §4.2).
         if tickCount % Self.nettopEveryNTicks == 1 || lastNet == nil {
-            lastNet = nettopCollector.sample()
+            if let net = nettopCollector.sample() {
+                lastNet = net
+                nettopConsecutiveFailures = 0
+            } else {
+                // Stale counters would fake activity: clear while failing;
+                // the next 5 s tick retries naturally (spec §4.5).
+                lastNet = nil
+                nettopConsecutiveFailures += 1
+            }
         }
         let samples = processCollector.sampleAll()
         let now = Date()
@@ -77,6 +97,7 @@ actor SamplerActor {
                                                  source: elevatedDetailSource,
                                                  nowUsec: UInt64(now.timeIntervalSince1970 * 1_000_000))
         }
+        snapshot.networkDegraded = nettopConsecutiveFailures >= Self.nettopFailureNoticeThreshold
         // System metrics share the 1 s master tick (spec §4.2).
         let systemSample = systemReducer.update(
             cpu: systemCollector.cpuTicks(),
@@ -156,4 +177,36 @@ actor SamplerActor {
         }
         return records
     }
+
+    // MARK: Self-impact budget (spec §4.2)
+
+    /// Watches this app's own CPU share; if it sustains above the 2 % budget
+    /// the master cadence halves to 2 s automatically and logs it.
+    private func checkSelfImpactBudget() {
+        guard currentInterval == Self.tickInterval else { return } // already degraded
+        var task = proc_taskinfo()
+        let size = Int32(MemoryLayout<proc_taskinfo>.size)
+        let got = withUnsafeMutablePointer(to: &task) { ptr in
+            proc_pidinfo(getpid(), PROC_PIDTASKINFO, 0, ptr, size)
+        }
+        let nowUsec = UInt64(Date().timeIntervalSince1970 * 1_000_000)
+        guard got == size else { return }
+        let cpuNS = task.pti_total_user &+ task.pti_total_system
+        defer { ownPriorCPU = (cpuNS, nowUsec) }
+        guard let prior = ownPriorCPU, nowUsec > prior.usec else { return }
+        let dtSeconds = Double(nowUsec - prior.usec) / 1_000_000
+        let ownPercent = Double(cpuNS - prior.ns) / (dtSeconds * 1_000_000_000) * 100
+        if ownPercent > Self.selfImpactBudgetPercent {
+            overBudgetTicks += 1
+        } else {
+            overBudgetTicks = 0
+        }
+        if overBudgetTicks >= 10 {
+            currentInterval = Self.degradedTickInterval
+            SamplerActor.logger.warning(
+                "Sampler self-impact over \(Self.selfImpactBudgetPercent)% budget — cadence halved to \(Self.degradedTickInterval) s")
+        }
+    }
+
+    private static let logger = Logger(subsystem: "com.brianwong.taskmanager", category: "Sampler")
 }
