@@ -24,6 +24,9 @@ final class ElevationManager: ObservableObject {
     static let daemonPlistName = "com.brianwong.taskmanager.daemon.plist"
 
     @Published private(set) var status: ElevationStatus = .notRegistered
+    /// False until the first refresh completes: the guided-setup sheet must
+    /// not race the asynchronous status probe on launch (spec §6.3).
+    @Published private(set) var didFirstRefresh = false
     /// Set once the user declines/dismisses setup so the guided sheet does
     /// not nag on every launch; "Retry setup" remains in Settings (§3.7).
     var setupDeclined: Bool {
@@ -97,6 +100,7 @@ final class ElevationManager: ObservableObject {
                 default:
                     self.status = .notRegistered
                 }
+                self.didFirstRefresh = true
                 self.probing = false
             }
         }

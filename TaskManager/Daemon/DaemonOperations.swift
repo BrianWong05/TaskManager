@@ -5,6 +5,12 @@
 import Foundation
 
 final class DaemonOperations: NSObject, TaskManagerDaemonProtocol {
+    /// Set on connection acceptance; forwarded to the audit log so lines
+    /// attribute the caller rather than the daemon itself (spec §6.2).
+    var callerPid: Int32 = 0 {
+        didSet { AuditLog.callerPid = callerPid }
+    }
+
     // MARK: 1. Batched cross-user detail fill (spec §4.4)
 
     func processDetails(forPIDs pids: [Int32], reply: @escaping ([TMProcessDetail]) -> Void) {
@@ -75,6 +81,13 @@ final class DaemonOperations: NSObject, TaskManagerDaemonProtocol {
     // MARK: 2. Termination (SIGTERM / SIGKILL — spec §3.3 semantics)
 
     func terminate(pid: Int32, mode: TMTerminationMode, reply: @escaping (Bool, String?) -> Void) {
+        // Root kill(0/…) signals whole process groups: reject anything that
+        // is not a plain positive pid above launchd.
+        guard pid > 1 else {
+            AuditLog.record(operation: "terminate", target: "pid \(pid)", result: "rejected: invalid pid")
+            reply(false, "Invalid pid")
+            return
+        }
         let signal = mode == .force ? SIGKILL : SIGTERM
         let result = kill(pid, signal)
         if result == 0 {

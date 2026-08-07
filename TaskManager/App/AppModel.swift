@@ -51,6 +51,10 @@ final class AppModel: ObservableObject {
     /// Set by the Mini monitor to select a process once the main window
     /// shows (spec §3.8 panel top-process click).
     @Published var pendingProcessSelection: ProcessSelection?
+    /// Drives the §4.2 sampling pause (window hidden + Mini monitor off).
+    @Published var mainWindowVisible = true
+
+    private var settingsCancellable: AnyCancellable?
 
     private(set) var miniMonitor: MiniMonitorController?
 
@@ -66,9 +70,21 @@ final class AppModel: ObservableObject {
             systemStore?.apply(sample)
         }
         elevation.start()
+        settingsCancellable = settings.$showMenuBarMonitor
+            .sink { [weak self] _ in self?.updateSamplingPause() }
         let monitor = MiniMonitorController()
         monitor.attach(appModel: self)
         miniMonitor = monitor
+    }
+
+    /// Window hidden AND menu-bar monitor disabled/hidden → process-level
+    /// sampling pauses (spec §4.2).
+    func updateSamplingPause() {
+        if mainWindowVisible || settings.showMenuBarMonitor {
+            snapshotStore.resume()
+        } else {
+            snapshotStore.pause()
+        }
     }
 
     func select(_ tab: MainTab) {

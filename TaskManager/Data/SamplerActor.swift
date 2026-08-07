@@ -21,8 +21,16 @@ actor SamplerActor {
     private var systemReducer = SystemMetricsReducer()
     private var running = false
     private var tickCount = 0
+    /// Window hidden AND Mini monitor off: process-level sampling pauses
+    /// while system-level sampling continues (spec §4.2).
+    private var processSamplingPaused = false
     private var lastNet: [Int32: NetCounters]?
     private var nettopConsecutiveFailures = 0
+    /// Net rates computed at each successful nettop tick against the real
+    /// elapsed time (nettop runs every 5 s — dividing its deltas by the 1 s
+    /// master dt would pulse the Network column at 5×, spec §4.2).
+    private var netPrior: (counters: [Int32: NetCounters], usec: UInt64)?
+    private var netRates: [Int32: (down: Double, up: Double)] = [:]
     private var currentInterval: TimeInterval = SamplerActor.tickInterval
     /// Self-impact bookkeeping: own cumulative CPU ns + timestamp.
     private var ownPriorCPU: (ns: UInt64, usec: UInt64)?
@@ -43,9 +51,9 @@ actor SamplerActor {
     }
 
     /// One hop per tick publishes both snapshots (spec §4.3): the process
-    /// table and the system metrics frame feeding the Performance tab and
-    /// the Mini monitor.
-    func start(publish: @escaping @MainActor (ProcessSnapshot, SystemSample?) -> Void) {
+    /// table (nil while process sampling is paused, §4.2) and the system
+    /// metrics frame feeding the Performance tab and the Mini monitor.
+    func start(publish: @escaping @MainActor (ProcessSnapshot?, SystemSample?) -> Void) {
         guard !running else { return }
         running = true
         Task { [weak self] in
@@ -62,43 +70,26 @@ actor SamplerActor {
         running = false
     }
 
+    func setProcessSamplingPaused(_ paused: Bool) {
+        processSamplingPaused = paused
+    }
+
     var isRunning: Bool { running }
     var sleepInterval: TimeInterval { currentInterval }
 
-    private func tick(publish: @escaping @MainActor (ProcessSnapshot, SystemSample?) -> Void) async {
+    private func tick(publish: @escaping @MainActor (ProcessSnapshot?, SystemSample?) -> Void) async {
         tickCount += 1
         checkSelfImpactBudget()
-        // 5 s sub-tick: per-process network via nettop (spec §4.2).
-        if tickCount % Self.nettopEveryNTicks == 1 || lastNet == nil {
-            if let net = nettopCollector.sample() {
-                lastNet = net
-                nettopConsecutiveFailures = 0
-            } else {
-                // Stale counters would fake activity: clear while failing;
-                // the next 5 s tick retries naturally (spec §4.5).
-                lastNet = nil
-                nettopConsecutiveFailures += 1
-            }
-        }
-        let samples = processCollector.sampleAll()
         let now = Date()
-        var snapshot = reducer.update(
-            samples: samples,
-            net: lastNet,
-            nowUsec: UInt64(now.timeIntervalSince1970 * 1_000_000),
-            coreCount: processCollector.logicalCoreCount(),
-            totalMemoryBytes: processCollector.totalMemoryBytes()
-        )
-        // Base-first + batch fill (spec §4.4): one batched XPC round-trip
-        // fills cross-user details when the daemon is available; otherwise
-        // the base snapshot publishes as-is (degraded mode §6.4).
-        if let elevatedDetailSource {
-            snapshot = await fillElevatedDetails(snapshot,
-                                                 source: elevatedDetailSource,
-                                                 nowUsec: UInt64(now.timeIntervalSince1970 * 1_000_000))
+        let nowUsec = UInt64(now.timeIntervalSince1970 * 1_000_000)
+
+        // Process-level section — paused when nothing is visible (spec §4.2).
+        var snapshot: ProcessSnapshot? = nil
+        if !processSamplingPaused {
+            snapshot = await sampleProcesses(now: now, nowUsec: nowUsec)
         }
-        snapshot.networkDegraded = nettopConsecutiveFailures >= Self.nettopFailureNoticeThreshold
-        // System metrics share the 1 s master tick (spec §4.2).
+
+        // System metrics share the 1 s master tick and never pause (§4.2).
         let systemSample = systemReducer.update(
             cpu: systemCollector.cpuTicks(),
             memory: systemCollector.memory(),
@@ -109,6 +100,59 @@ actor SamplerActor {
             now: now
         )
         await publish(snapshot, systemSample)
+    }
+
+    /// The full process-table pipeline for one tick: nettop sub-tick,
+    /// enumeration, reduction, net rates and the elevated batch fill.
+    private func sampleProcesses(now: Date, nowUsec: UInt64) async -> ProcessSnapshot {
+        // 5 s sub-tick: per-process network via nettop (spec §4.2).
+        if tickCount % Self.nettopEveryNTicks == 1 || lastNet == nil {
+            if let net = nettopCollector.sample() {
+                if let prior = netPrior {
+                    let dtSeconds = max(Double(nowUsec - prior.usec) / 1_000_000, 0.001)
+                    var rates: [Int32: (down: Double, up: Double)] = [:]
+                    for (pid, counters) in net {
+                        if let before = prior.counters[pid],
+                           counters.bytesIn >= before.bytesIn,
+                           counters.bytesOut >= before.bytesOut {
+                            rates[pid] = (down: Double(counters.bytesIn - before.bytesIn) / dtSeconds,
+                                          up: Double(counters.bytesOut - before.bytesOut) / dtSeconds)
+                        } else {
+                            rates[pid] = (down: 0, up: 0) // new or restarted process
+                        }
+                    }
+                    netRates = rates
+                }
+                netPrior = (net, nowUsec)
+                lastNet = net
+                nettopConsecutiveFailures = 0
+            } else {
+                // Stale counters would fake activity: clear while failing;
+                // the next 5 s tick retries naturally (spec §4.5).
+                lastNet = nil
+                netRates = [:]
+                nettopConsecutiveFailures += 1
+            }
+        }
+        let samples = processCollector.sampleAll()
+        var snapshot = reducer.update(
+            samples: samples,
+            net: lastNet,
+            nowUsec: nowUsec,
+            coreCount: processCollector.logicalCoreCount(),
+            totalMemoryBytes: processCollector.totalMemoryBytes()
+        )
+        applyNetRates(&snapshot)
+        // Base-first + batch fill (spec §4.4): one batched XPC round-trip
+        // fills cross-user details when the daemon is available; otherwise
+        // the base snapshot publishes as-is (degraded mode §6.4).
+        if let elevatedDetailSource {
+            snapshot = await fillElevatedDetails(snapshot,
+                                                 source: elevatedDetailSource,
+                                                 nowUsec: nowUsec)
+        }
+        snapshot.networkDegraded = nettopConsecutiveFailures >= Self.nettopFailureNoticeThreshold
+        return snapshot
     }
 
     /// Merge daemon details into cross-user rows: memory + command line
@@ -168,6 +212,28 @@ actor SamplerActor {
             elevatedPrior.removeValue(forKey: pid)
         }
         return snapshot
+    }
+
+    /// Overwrites the reducer's placeholder net columns with rates computed
+    /// over the true nettop interval; rows without counters show `–` (nil).
+    private func applyNetRates(_ snapshot: inout ProcessSnapshot) {
+        func apply(_ record: inout ProcessRecord) {
+            if lastNet != nil, let rate = netRates[record.pid] {
+                record.netDownRate = rate.down
+                record.netUpRate = rate.up
+            } else {
+                record.netDownRate = nil
+                record.netUpRate = nil
+            }
+        }
+        for index in snapshot.backgroundProcesses.indices {
+            apply(&snapshot.backgroundProcesses[index])
+        }
+        for groupIndex in snapshot.groups.indices {
+            for childIndex in snapshot.groups[groupIndex].children.indices {
+                apply(&snapshot.groups[groupIndex].children[childIndex])
+            }
+        }
     }
 
     private func allRecords(in snapshot: ProcessSnapshot) -> [ProcessRecord] {

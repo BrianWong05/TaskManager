@@ -29,21 +29,23 @@ struct MainShell: View {
         .onChange(of: elevationStatus) { _ in
             statusBarDismissed = false
         }
-        // Guided setup on first launch (spec §6.3).
-        .onAppear {
-            if elevationStatus == .notRegistered && !appModel.elevation.setupDeclined {
-                showSetup = true
-            }
-        }
-        .onChange(of: elevationStatus) { newStatus in
-            if newStatus == .notRegistered && !appModel.elevation.setupDeclined && !showSetup {
-                showSetup = true
-            }
-        }
+        // Guided setup on first launch (spec §6.3) — only after the first
+        // status probe completes, so an already-registered daemon never
+        // triggers the sheet.
+        .onAppear(perform: maybeShowSetup)
+        .onChange(of: appModel.elevation.didFirstRefresh) { _ in maybeShowSetup() }
+        .onChange(of: elevationStatus) { _ in maybeShowSetup() }
         .sheet(isPresented: $showSetup) {
             ElevationSetupSheet()
                 .environmentObject(appModel)
         }
+    }
+
+    private func maybeShowSetup() {
+        guard appModel.elevation.didFirstRefresh,
+              elevationStatus == .notRegistered,
+              !appModel.elevation.setupDeclined else { return }
+        showSetup = true
     }
 
     @ViewBuilder

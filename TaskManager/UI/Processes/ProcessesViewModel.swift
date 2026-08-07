@@ -267,6 +267,9 @@ final class ProcessesViewModel: ObservableObject {
     /// active, otherwise the failure dialog explains why.
     private func terminate(_ record: ProcessRecord, mode: TMTerminationMode) {
         guard !record.isProtected else { return }
+        // kill(0/…) signals process groups: never leave the UI layer able
+        // to pass anything but a plain positive pid.
+        guard record.pid > 1 else { return }
         if record.detailLevel == .requiresElevation || record.uid != currentUid {
             guard let elevation, elevation.isActive else {
                 terminationError = TerminationError(

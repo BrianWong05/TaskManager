@@ -11,17 +11,25 @@ final class ProcessSnapshotStore: ObservableObject {
     @Published private(set) var perProcessNetworkDegraded = false
 
     private let sampler: SamplerActor
+    private var onSystemSample: (@MainActor (SystemSample) -> Void)?
+    /// Window hidden AND Mini monitor off → process-level sampling pauses
+    /// while system-level sampling continues (spec §4.2).
+    private var paused = false
 
     init(sampler: SamplerActor = SamplerActor()) {
         self.sampler = sampler
     }
 
     func start(onSystemSample: @escaping @MainActor (SystemSample) -> Void = { _ in }) {
+        self.onSystemSample = onSystemSample
         Task {
             await sampler.start { [weak self] snapshot, systemSample in
-                self?.apply(snapshot)
+                // nil = process sampling paused (§4.2): keep the last frame.
+                if let snapshot {
+                    self?.apply(snapshot)
+                }
                 if let systemSample {
-                    onSystemSample(systemSample)
+                    self?.onSystemSample?(systemSample)
                 }
             }
         }
@@ -29,6 +37,19 @@ final class ProcessSnapshotStore: ObservableObject {
 
     func stop() {
         Task { await sampler.stop() }
+    }
+
+    /// Pause only the process table; system sampling keeps running (§4.2).
+    func pause() {
+        guard !paused else { return }
+        paused = true
+        Task { await sampler.setProcessSamplingPaused(true) }
+    }
+
+    func resume() {
+        guard paused else { return }
+        paused = false
+        Task { await sampler.setProcessSamplingPaused(false) }
     }
 
     private func apply(_ newSnapshot: ProcessSnapshot) {

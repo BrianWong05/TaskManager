@@ -19,6 +19,8 @@ final class DaemonDelegate: NSObject, NSXPCListenerDelegate {
                             result: "rejected (signature check failed)")
             return false
         }
+        // Audit lines attribute the caller, not the daemon itself (§6.2).
+        operations.callerPid = newConnection.processIdentifier
         newConnection.exportedInterface = {
             let interface = NSXPCInterface(with: TaskManagerDaemonProtocol.self)
             // TMProcessDetail arrays need explicit allowed classes on the reply.
@@ -40,17 +42,21 @@ final class DaemonDelegate: NSObject, NSXPCListenerDelegate {
 
 enum CallerValidator {
     /// Accept only binaries signed with the same Team ID as this daemon.
-    /// Ad-hoc / unsigned development builds fall back to an exact
-    /// bundle-identifier match so the runbook flow still works pre-team.
+    /// The identifier-only fallback applies EXCLUSIVELY when the daemon
+    /// itself is ad-hoc signed (development builds): a team-signed daemon
+    /// must never accept a caller lacking a TeamIdentifier, otherwise any
+    /// locally forged ad-hoc binary with the right identifier could reach
+    /// the root surface.
     static func isAuthorized(_ connection: NSXPCConnection) -> Bool {
         guard let callerInfo = signingInfo(pid: connection.processIdentifier) else {
             return false
         }
         let ownTeam = selfSigningInfo()?["TeamIdentifier"] as? String
         let callerTeam = callerInfo["TeamIdentifier"] as? String
-        if let ownTeam, !ownTeam.isEmpty, let callerTeam, !callerTeam.isEmpty {
-            return ownTeam == callerTeam
+        if let ownTeam, !ownTeam.isEmpty {
+            return callerTeam == ownTeam
         }
+        // Daemon is ad-hoc (pre-team development build): identifier match.
         let identifier = callerInfo[kSecCodeInfoIdentifier as String] as? String
         return identifier == "com.brianwong.taskmanager"
     }
@@ -87,9 +93,12 @@ enum CallerValidator {
 enum AuditLog {
     private static let path = "/Library/Application Support/TaskManager/audit.log"
 
+    /// Set per accepted connection: audit lines attribute the caller (§6.2).
+    nonisolated(unsafe) static var callerPid: Int32 = 0
+
     static func record(operation: String, target: String, result: String) {
         let stamp = ISO8601DateFormatter().string(from: Date())
-        let line = "\(stamp) pid=\(ProcessInfo.processInfo.processIdentifier) op=\(operation) target=\(target) result=\(result)\n"
+        let line = "\(stamp) caller=\(callerPid) op=\(operation) target=\(target) result=\(result)\n"
         let directory = (path as NSString).deletingLastPathComponent
         try? FileManager.default.createDirectory(atPath: directory,
                                                  withIntermediateDirectories: true)

@@ -29,22 +29,51 @@ struct NettopCollector: NettopCollecting {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()
+        // Drain the pipe continuously: on large process tables nettop's
+        // output exceeds the pipe buffer and the child would block on write
+        // until we killed it, faking a nettop failure (spec §4.5).
+        let box = OutputBox()
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+            } else {
+                box.append(chunk)
+            }
+        }
         do {
             try process.run()
         } catch {
+            pipe.fileHandleForReading.readabilityHandler = nil
             return nil
         }
-        // nettop -L 1 can stall briefly; bound the wait.
+        // nettop -L 1 can stall briefly; bound the wait without busy-polling.
         let deadline = Date().addingTimeInterval(3)
         while process.isRunning, Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.02)
+            Thread.sleep(forTimeInterval: 0.05)
         }
         if process.isRunning {
             process.terminate()
-            return nil
         }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        return String(data: data, encoding: .utf8)
+        pipe.fileHandleForReading.readabilityHandler = nil
+        box.append(pipe.fileHandleForReading.readDataToEndOfFile())
+        return box.string()
+    }
+
+    /// Thread-safe accumulator for the drained pipe data.
+    private final class OutputBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data = Data()
+        func append(_ chunk: Data) {
+            lock.lock()
+            data.append(chunk)
+            lock.unlock()
+        }
+        func string() -> String? {
+            lock.lock()
+            defer { lock.unlock() }
+            return String(data: data, encoding: .utf8)
+        }
     }
 
     /// Parses `nettop -P -x` CSV: header `,bytes_in,bytes_out,` then rows of
