@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<!--
+  PROTOTYPE — throwaway UI exploration for wayfinder ticket 04 (UI structure).
+  Three full-app variants of a Win11-style macOS Task Manager:
+    A — "Win11 Faithful":  left nav rail + grouped processes + 7 columns + left-list/big-chart Performance
+    B — "Classic Dense":   top tab bar + flat processes + 7 columns + card-grid Performance
+    C — "Modern Hybrid":   collapsible rail + switchable grouped/flat + 3 columns + left-list/big-chart
+  Switch variants via the floating bottom bar or ?variant=A|B|C.
+  Static mockup with fake-but-realistic macOS data. No logic, no persistence.
+-->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Task Manager UI Prototype — ticket 04</title>
+<style>
+  :root {
+    --accent: #0067c0;
+    --accent-soft: rgba(0,103,192,.12);
+    --bg: #f3f3f3; --surface: #ffffff; --surface2: #fafafa;
+    --text: #1b1b1b; --text2: #616161; --border: #e5e5e5;
+    --green: #0f7b0f; --orange: #9d5d00; --red: #c42b1c;
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Segoe UI Variable", "Segoe UI", -apple-system, sans-serif; font-size: 13px; color: var(--text); background: var(--bg); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .win { flex: 1; display: flex; flex-direction: column; background: var(--surface); margin: 10px; border-radius: var(--radius); border: 1px solid var(--border); overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
+  .titlebar { height: 34px; display: flex; align-items: center; gap: 8px; padding: 0 12px; background: var(--surface2); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+  .dots { display: flex; gap: 6px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; }
+  .dot.r { background: #ff5f57; } .dot.y { background: #febc2e; } .dot.g { background: #28c840; }
+  .titlebar .t { margin-left: auto; margin-right: auto; font-size: 12px; color: var(--text2); }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+
+  /* ---------- left nav rail ---------- */
+  .rail { width: 190px; flex-shrink: 0; padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; background: var(--surface2); border-right: 1px solid var(--border); }
+  .rail.collapsed { width: 56px; }
+  .rail.collapsed .navitem span { display: none; }
+  .rail .search { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; margin-bottom: 8px; color: var(--text2); }
+  .rail.collapsed .search { display: none; }
+  .navitem { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; cursor: pointer; color: var(--text); }
+  .navitem:hover { background: rgba(0,0,0,.04); }
+  .navitem.active { background: var(--accent-soft); font-weight: 600; }
+  .navitem.active::before { content: ""; width: 3px; height: 14px; background: var(--accent); border-radius: 2px; margin-left: -8px; }
+  .rail .spacer { flex: 1; }
+  .icon { width: 17px; text-align: center; flex-shrink: 0; }
+
+  /* ---------- top tabs ---------- */
+  .tabs { display: flex; gap: 2px; padding: 8px 12px 0; border-bottom: 1px solid var(--border); background: var(--surface2); flex-shrink: 0; }
+  .tab { padding: 8px 16px; cursor: pointer; color: var(--text2); border-radius: 6px 6px 0 0; position: relative; }
+  .tab.active { color: var(--text); font-weight: 600; background: var(--surface); }
+  .tab.active::after { content: ""; position: absolute; left: 16px; right: 16px; bottom: 0; height: 3px; background: var(--accent); border-radius: 2px 2px 0 0; }
+
+  .pane { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+
+  /* ---------- toolbar ---------- */
+  .toolbar { display: flex; align-items: center; gap: 10px; padding: 8px 14px; border-bottom: 1px solid var(--border); }
+  .toolbar input[type=search] { padding: 5px 10px; border: 1px solid var(--border); border-radius: 6px; width: 220px; font: inherit; }
+  .seg { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin-left: auto; }
+  .seg button { border: 0; background: var(--surface); padding: 4px 12px; font: inherit; cursor: pointer; color: var(--text2); }
+  .seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .btn { border: 1px solid var(--border); background: var(--surface); border-radius: 6px; padding: 4px 12px; font: inherit; cursor: pointer; }
+
+  /* ---------- process table ---------- */
+  table { width: 100%; border-collapse: collapse; }
+  thead th { text-align: left; font-weight: 600; font-size: 12px; color: var(--text2); padding: 7px 12px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--surface); white-space: nowrap; }
+  thead th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody td { padding: 6px 12px; border-bottom: 1px solid #f0f0f0; white-space: nowrap; }
+  tbody tr:hover { background: #f7f9fb; }
+  tbody tr.selected { background: var(--accent-soft); }
+  .pname { display: flex; align-items: center; gap: 8px; }
+  .appicon { width: 18px; height: 18px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; font-size: 10px; color: #fff; flex-shrink: 0; }
+  .grouprow td { background: #fafbfc; }
+  .caret { color: var(--text2); font-size: 10px; width: 12px; display: inline-block; }
+  .child td:first-child { padding-left: 40px; }
+  .heat1 { background: rgba(255,210,120,.25); } .heat2 { background: rgba(255,170,90,.45); } .heat3 { background: rgba(255,120,80,.6); }
+  .chip { display: inline-block; font-size: 11px; padding: 1px 8px; border-radius: 10px; background: #eef2f6; color: var(--text2); }
+  .tablewrap { flex: 1; overflow: auto; }
+
+  /* ---------- performance ---------- */
+  .perf { flex: 1; display: flex; min-height: 0; }
+  .perf-side { width: 230px; flex-shrink: 0; border-right: 1px solid var(--border); overflow: auto; }
+  .perf-item { padding: 10px 14px; border-bottom: 1px solid #f0f0f0; cursor: pointer; }
+  .perf-item:hover { background: #f7f9fb; }
+  .perf-item.active { border-left: 3px solid var(--accent); background: var(--accent-soft); padding-left: 11px; }
+  .perf-item .nm { font-weight: 600; }
+  .perf-item .val { color: var(--text2); font-size: 12px; margin-top: 2px; }
+  .spark { display: block; margin-top: 6px; }
+  .perf-main { flex: 1; padding: 18px 22px; display: flex; flex-direction: column; min-width: 0; }
+  .perf-main h2 { font-size: 17px; font-weight: 600; margin-bottom: 2px; }
+  .perf-main .big { font-size: 30px; font-weight: 300; color: var(--accent); }
+  .bigchart { flex: 1; margin-top: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: repeating-linear-gradient(0deg, transparent, transparent 39px, #f0f0f0 39px, #f0f0f0 40px), repeating-linear-gradient(90deg, transparent, transparent 39px, #f0f0f0 39px, #f0f0f0 40px); position: relative; overflow: hidden; min-height: 160px; }
+  .statgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px 24px; margin-top: 12px; font-size: 12px; color: var(--text2); }
+  .statgrid b { color: var(--text); font-weight: 600; }
+
+  .perf-grid { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 14px; overflow: auto; align-content: start; }
+  .card { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; }
+  .card h3 { font-size: 13px; margin-bottom: 2px; }
+  .card .v { font-size: 20px; font-weight: 300; color: var(--accent); }
+  .card .sub { font-size: 11px; color: var(--text2); margin-top: 6px; }
+
+  /* ---------- startup ---------- */
+  .status-on { color: var(--green); } .status-off { color: var(--text2); }
+
+  /* ---------- users / settings ---------- */
+  .simple-list { padding: 14px; overflow: auto; }
+  .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid #f0f0f0; }
+  .toggle { width: 38px; height: 20px; border-radius: 10px; background: #ccc; position: relative; }
+  .toggle.on { background: var(--accent); }
+  .toggle::after { content: ""; width: 14px; height: 14px; border-radius: 50%; background: #fff; position: absolute; top: 3px; left: 3px; }
+  .toggle.on::after { left: 21px; }
+
+  /* ---------- switcher ---------- */
+  .switcher { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); background: #1b1b1b; color: #fff; border-radius: 20px; padding: 8px 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.35); z-index: 99; font-size: 13px; }
+  .switcher button { background: none; border: 0; color: #fff; font-size: 15px; cursor: pointer; padding: 0 4px; }
+  .switcher .lbl { min-width: 320px; text-align: center; }
+  .switcher .lbl small { color: #aaa; display: block; font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div class="win">
+  <div class="titlebar">
+    <div class="dots"><div class="dot r"></div><div class="dot y"></div><div class="dot g"></div></div>
+    <div class="t" id="win-title">Task Manager</div>
+  </div>
+  <div id="app" class="body" style="flex-direction:column;"></div>
+</div>
+
+<div class="switcher">
+  <button id="prev" title="Previous variant (←)">◀</button>
+  <div class="lbl"><span id="vkey"></span><small id="vdesc"></small></div>
+  <button id="next" title="Next variant (→)">▶</button>
+</div>
+
+<script>
+// ---------- fake data ----------
+const APPS = [
+  { name: "Google Chrome", color: "#4285f4", cpu: 23.4, mem: 1843, disk: 0.2, net: 124.5, gpu: 8, kids: [
+    { name: "Chrome — Renderer: Inbox", cpu: 12.1, mem: 782, disk: 0.1, net: 98.2 },
+    { name: "Chrome — Renderer: Docs", cpu: 8.3, mem: 640, disk: 0.0, net: 12.1 },
+    { name: "Chrome — GPU Process", cpu: 3.0, mem: 421, disk: 0.1, net: 14.2 } ] },
+  { name: "Xcode", color: "#1575f9", cpu: 18.2, mem: 2911, disk: 4.8, net: 0.0, gpu: 5, kids: [
+    { name: "Xcode", cpu: 11.4, mem: 2103, disk: 3.9, net: 0.0 },
+    { name: "XCBuildService", cpu: 5.9, mem: 704, disk: 0.8, net: 0.0 },
+    { name: "SourceKitService", cpu: 0.9, mem: 104, disk: 0.1, net: 0.0 } ] },
+  { name: "Figma", color: "#a259ff", cpu: 6.1, mem: 954, disk: 0.0, net: 34.2, gpu: 11, kids: [
+    { name: "Figma", cpu: 6.1, mem: 954, disk: 0.0, net: 34.2 } ] },
+  { name: "Slack", color: "#611f69", cpu: 2.2, mem: 611, disk: 0.0, net: 8.4, gpu: 1, kids: [
+    { name: "Slack", cpu: 2.2, mem: 611, disk: 0.0, net: 8.4 } ] },
+];
+const FLAT = [
+  { name: "kernel_task", cpu: 9.7, mem: 1288, disk: 0.0, net: 0.0 },
+  { name: "WindowServer", cpu: 6.3, mem: 842, disk: 0.1, net: 0.0 },
+  { name: "mdworker_shared", cpu: 1.1, mem: 96, disk: 3.2, net: 0.0 },
+  { name: "Spotlight", cpu: 0.8, mem: 210, disk: 1.7, net: 0.0 },
+  { name: "docker", cpu: 3.4, mem: 1521, disk: 2.2, net: 6.8 },
+  { name: "backupd", cpu: 0.2, mem: 44, disk: 8.9, net: 0.0 },
+];
+const STARTUP = [
+  { name: "Google Chrome", where: "Login Item (BTM)", on: true },
+  { name: "Slack", where: "Login Item (BTM)", on: true },
+  { name: "com.docker.helper", where: "~/Library/LaunchAgents", on: true },
+  { name: "com.spotify.client.startup", where: "~/Library/LaunchAgents", on: false },
+  { name: "com.apple.mdworker", where: "/Library/LaunchDaemons", on: true },
+];
+const series = (n, base, amp) => Array.from({length: n}, (_, i) => base + amp * Math.abs(Math.sin(i * .7) + Math.sin(i * .23)));
+const sparkline = (data, w, h, stroke = "var(--accent)") => {
+  const max = Math.max(...data), pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * (h - 2) - 1}`).join(" ");
+  return `<svg class="spark" width="${w}" height="${h}"><polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="1.5"/></svg>`;
+};
+const bigArea = (data, w = 900, h = 200) => {
+  const max = Math.max(...data), pts = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / max) * (h - 8) - 4}`).join(" ");
+  return `<svg width="100%" height="100%" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polygon points="0,${h} ${pts} ${w},${h}" fill="rgba(0,103,192,.10)"/>
+    <polyline points="${pts}" fill="none" stroke="var(--accent)" stroke-width="2"/></svg>`;
+};
+const cpuSeries = series(60, 30, 18), memSeries = series(60, 62, 6), netSeries = series(60, 20, 30), diskSeries = series(60, 12, 20);
+const heat = v => v > 40 ? "heat3" : v > 15 ? "heat2" : v > 5 ? "heat1" : "";
+
+// ---------- shared bits ----------
+const NAV = [["⚙","Processes"],["📈","Performance"],["🚀","Startup apps"],["👤","Users"],["⚙︎","Settings"]];
+function rail(collapsed, active = 0) {
+  return `<div class="rail ${collapsed ? "collapsed" : ""}">
+    ${collapsed ? "" : `<div class="search">🔍 <span>Search</span></div>`}
+    ${NAV.map((n, i) => `<div class="navitem ${i === active ? "active" : ""}"><span class="icon">${n[0]}</span><span>${n[1]}</span></div>`).join("")}
+  </div>`;
+}
+function procRows(grouped, cols) {
+  let rows = "";
+  if (grouped) {
+    for (const a of APPS) {
+      rows += `<tr class="grouprow"><td><span class="pname"><span class="caret">▾</span><span class="appicon" style="background:${a.color}"></span>${a.name}</span></td>
+        <td><span class="chip">Running</span></td>
+        <td class="num ${heat(a.cpu)}">${a.cpu.toFixed(1)}%</td><td class="num">${(a.mem/1024).toFixed(1)} GB</td>
+        ${cols === 7 ? `<td class="num">${a.disk.toFixed(1)} MB/s</td><td class="num">${a.net.toFixed(1)} Mbps</td><td class="num">${a.gpu}%</td>` : ""}</tr>`;
+      for (const k of a.kids) rows += `<tr class="child"><td><span class="pname">${k.name}</span></td><td></td>
+        <td class="num ${heat(k.cpu)}">${k.cpu.toFixed(1)}%</td><td class="num">${k.mem} MB</td>
+        ${cols === 7 ? `<td class="num">${k.disk.toFixed(1)} MB/s</td><td class="num">${k.net.toFixed(1)} Mbps</td><td class="num">–</td>` : ""}</tr>`;
+    }
+  } else {
+    const all = [...APPS.map(a => ({ name: a.name, ...a })), ...FLAT];
+    for (const p of all) rows += `<tr><td><span class="pname">${p.name}</span></td><td><span class="chip">Running</span></td>
+      <td class="num ${heat(p.cpu)}">${p.cpu.toFixed(1)}%</td><td class="num">${p.mem >= 1024 ? (p.mem/1024).toFixed(1) + " GB" : p.mem + " MB"}</td>
+      ${cols === 7 ? `<td class="num">${(p.disk||0).toFixed(1)} MB/s</td><td class="num">${(p.net||0).toFixed(1)} Mbps</td><td class="num">–</td>` : ""}</tr>`;
+  }
+  return rows;
+}
+function procTable(grouped, cols) {
+  return `<table><thead><tr><th>Name</th><th>Status</th><th class="num">CPU</th><th class="num">Memory</th>
+    ${cols === 7 ? `<th class="num">Disk</th><th class="num">Network</th><th class="num">GPU</th>` : ""}
+    </tr></thead><tbody>${procRows(grouped, cols)}</tbody></table>`;
+}
+function perfSideBySide() {
+  const items = [["CPU","23%",cpuSeries],["Memory","62%",memSeries],["Disk 1","14 MB/s",diskSeries],["Network","124 Mbps",netSeries],["GPU","8%",series(60,8,7)]];
+  return `<div class="perf">
+    <div class="perf-side">${items.map((it,i)=>`<div class="perf-item ${i===0?"active":""}"><div class="nm">${it[0]}</div><div class="val">${it[1]}</div>${sparkline(it[2],190,34)}</div>`).join("")}</div>
+    <div class="perf-main"><h2>CPU — Apple M3 Pro</h2><div class="big">23%</div>
+      <div class="bigchart">${bigArea(cpuSeries)}</div>
+      <div class="statgrid"><span>Utilization <b>23%</b></span><span>Processes <b>942</b></span><span>Cores <b>11</b></span><span>Up time <b>3:14:07:22</b></span></div>
+    </div></div>`;
+}
+function perfCardGrid() {
+  const cards = [["CPU","23%",cpuSeries,"11 cores · 942 processes"],["Memory","62%",memSeries,"10.1 / 18 GB · 2.1 GB compressed"],
+    ["Disk","14 MB/s",diskSeries,"Read 9 MB/s · Write 5 MB/s"],["Network","124 Mbps",netSeries,"↑ 12 Mbps · ↓ 112 Mbps"],
+    ["GPU","8%",series(60,8,7),"Apple M3 Pro · display 1 of 1"]];
+  return `<div class="perf-grid">${cards.map(c=>`<div class="card"><h3>${c[0]}</h3><div class="v">${c[1]}</div>${sparkline(c[2],260,60)}<div class="sub">${c[3]}</div></div>`).join("")}</div>`;
+}
+function startupTab() {
+  return `<div class="toolbar"><input type="search" placeholder="Search startup items"><span style="margin-left:auto;color:var(--text2)">5 items · 4 enabled</span></div>
+  <div class="tablewrap"><table><thead><tr><th>Name</th><th>Location</th><th>Status</th><th></th></tr></thead><tbody>
+  ${STARTUP.map(s=>`<tr><td><span class="pname"><span class="appicon" style="background:#888"></span>${s.name}</span></td><td>${s.where}</td>
+  <td class="${s.on?"status-on":"status-off"}">${s.on?"Enabled":"Disabled"}</td><td class="num"><button class="btn">${s.on?"Disable":"Enable"}</button></td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+function usersTab() {
+  return `<div class="simple-list"><table><thead><tr><th>User</th><th>Processes</th><th class="num">CPU</th><th class="num">Memory</th></tr></thead><tbody>
+  <tr class="selected"><td><span class="pname">👤 brianwong <span class="chip">current</span></span></td><td>707</td><td class="num">58%</td><td class="num">11.2 GB</td></tr>
+  <tr><td><span class="pname">👤 _windowserver</span></td><td>3</td><td class="num">6%</td><td class="num">0.8 GB</td></tr>
+  <tr><td><span class="pname">👤 root <span class="chip">requires elevation</span></span></td><td>232</td><td class="num">11%</td><td class="num">1.4 GB</td></tr>
+  </tbody></table></div>`;
+}
+function settingsTab() {
+  return `<div class="simple-list">
+  ${[["Theme","System / Light / Dark",true],["Refresh rate","1 second",true],["Start at login","",true],["Show menu-bar monitor","",true],["Launch minimized","",false]]
+    .map(s=>`<div class="setting-row"><div><b>${s[0]}</b>${s[1]?`<div style="color:var(--text2);font-size:12px">${s[1]}</div>`:""}</div><div class="toggle ${s[2]?"on":""}"></div></div>`).join("")}
+  </div>`;
+}
+function tabsBar(active = 0) {
+  return `<div class="tabs">${NAV.map((n,i)=>`<div class="tab ${i===active?"active":""}">${n[1]}</div>`).join("")}</div>`;
+}
+
+// ---------- variants ----------
+const VARIANTS = {
+  A: { name: "Win11 Faithful", desc: "左导航栏 · 应用分组进程 · 7 列 · 性能页左列表+大图",
+    html: `<div style="display:flex;flex:1;min-height:0">${rail(false)}
+      <div class="pane">
+        <div class="toolbar"><input type="search" placeholder="Search processes"><span style="color:var(--text2)">942 processes</span>
+          <button class="btn" style="margin-left:auto">End task</button></div>
+        <div class="tablewrap">${procTable(true, 7)}</div>
+      </div></div>` },
+  B: { name: "Classic Dense", desc: "顶部 Tab 栏 · 纯平铺进程 · 7 列 · 性能页网格卡片",
+    html: `${tabsBar(0)}
+      <div class="pane">
+        <div class="toolbar"><input type="search" placeholder="Filter"><span style="color:var(--text2)">942 processes · sorted by CPU ▾</span></div>
+        <div class="tablewrap">${procTable(false, 7)}</div>
+      </div>` },
+  C: { name: "Modern Hybrid", desc: "可折叠窄导航 · 分组/平铺可切换 · 3 列精简 · 性能页左列表+大图",
+    html: `<div style="display:flex;flex:1;min-height:0">${rail(true)}
+      <div class="pane">
+        <div class="toolbar"><input type="search" placeholder="Search processes">
+          <div class="seg"><button class="on">Grouped</button><button>Flat</button></div>
+          <button class="btn">End task</button></div>
+        <div class="tablewrap">${procTable(true, 3)}</div>
+      </div></div>` },
+};
+
+// extra pages reachable from the variant switcher label links
+const PAGES = { Processes: null, Performance: null };
+let currentPage = "Processes";
+function render() {
+  const v = new URLSearchParams(location.search).get("variant") || "A";
+  const variant = VARIANTS[v] || VARIANTS.A;
+  document.getElementById("vkey").textContent = `${v} — ${variant.name}`;
+  document.getElementById("vdesc").textContent = variant.desc + "　(切换 Processes/Performance/Startup/Users/Settings 页面看完整结构 → 点下方链接)";
+  let content = variant.html;
+  if (currentPage !== "Processes") {
+    const pageHtml = { Performance: perfSideBySide(), Startup: startupTab(), Users: usersTab(), Settings: settingsTab() }[currentPage];
+    const isRail = v !== "B";
+    content = isRail
+      ? `<div style="display:flex;flex:1;min-height:0">${rail(v === "C", NAV.findIndex(n=>n[1]===currentPage))}<div class="pane">${pageHtml}</div></div>`
+      : `${tabsBar(NAV.findIndex(n=>n[1]===currentPage))}<div class="pane">${pageHtml}</div>`;
+  }
+  document.getElementById("app").innerHTML = content + `
+    <div style="padding:6px 14px;border-top:1px solid var(--border);display:flex;gap:14px;font-size:12px;background:var(--surface2)">
+      <span style="color:var(--text2)">Demo pages:</span>
+      ${["Processes","Performance","Startup","Users","Settings"].map(p=>`<a href="#" data-page="${p}" style="color:${p===currentPage?"var(--accent)":"var(--text2)"};text-decoration:${p===currentPage?"underline":"none"}">${p}</a>`).join("")}
+    </div>`;
+  document.querySelectorAll("[data-page]").forEach(a => a.onclick = e => { e.preventDefault(); currentPage = a.dataset.page; render(); });
+}
+const order = ["A","B","C"];
+function setVariant(v) { const u = new URL(location.href); u.searchParams.set("variant", v); history.replaceState(null, "", u); render(); }
+document.getElementById("prev").onclick = () => { const v = new URLSearchParams(location.search).get("variant") || "A"; setVariant(order[(order.indexOf(v) + order.length - 1) % order.length]); };
+document.getElementById("next").onclick = () => { const v = new URLSearchParams(location.search).get("variant") || "A"; setVariant(order[(order.indexOf(v) + 1) % order.length]); };
+document.addEventListener("keydown", e => {
+  if (["INPUT","TEXTAREA"].includes(document.activeElement.tagName)) return;
+  if (e.key === "ArrowLeft") document.getElementById("prev").click();
+  if (e.key === "ArrowRight") document.getElementById("next").click();
+});
+render();
+</script>
+</body>
+</html>
