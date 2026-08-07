@@ -515,6 +515,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "App/TaskManager-Bridging-Header.h";
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Task Manager";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Brian Wong. All rights reserved.";
@@ -541,6 +542,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "App/TaskManager-Bridging-Header.h";
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Task Manager";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "Copyright © 2026 Brian Wong. All rights reserved.";

@@ -39,9 +39,14 @@ enum MainTab: String, CaseIterable, Identifiable {
 final class AppModel: ObservableObject {
     @Published var selectedTab: MainTab
 
+    /// Single data source shared by the main window and the Mini monitor
+    /// (spec §4.3). Sampling starts once with the app.
+    let snapshotStore = ProcessSnapshotStore()
+
     init() {
         let stored = UserDefaults.standard.string(forKey: "selectedTab")
         selectedTab = stored.flatMap(MainTab.init(rawValue:)) ?? .processes
+        snapshotStore.start()
     }
 
     func select(_ tab: MainTab) {
