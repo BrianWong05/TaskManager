@@ -42,7 +42,8 @@ final class AppModel: ObservableObject {
 
     /// Single data source shared by the main window and the Mini monitor
     /// (spec §4.3). Sampling starts once with the app.
-    let snapshotStore = ProcessSnapshotStore()
+    let elevation = ElevationManager()
+    let snapshotStore: ProcessSnapshotStore
     let systemStore = SystemMetricsStore()
     let settings = SettingsStore()
 
@@ -55,9 +56,14 @@ final class AppModel: ObservableObject {
     init() {
         let stored = UserDefaults.standard.string(forKey: "selectedTab")
         selectedTab = stored.flatMap(MainTab.init(rawValue:)) ?? .processes
+        // The sampler talks to the daemon through the Elevation client for
+        // the batched cross-user detail fill (spec §4.4).
+        snapshotStore = ProcessSnapshotStore(
+            sampler: SamplerActor(elevatedDetailSource: elevation.client))
         snapshotStore.start { [weak systemStore] sample in
             systemStore?.apply(sample)
         }
+        elevation.start()
         let monitor = MiniMonitorController()
         monitor.attach(appModel: self)
         miniMonitor = monitor

@@ -19,7 +19,8 @@ public let kTaskManagerDaemonIdentifier = "com.brianwong.taskmanager.daemon"
 /// Cross-user per-process detail filled by the daemon in one batched round-trip
 /// (spec §4.4). Only fields an unprivileged caller cannot read itself.
 @objc(TMProcessDetail)
-public final class TMProcessDetail: NSObject, NSSecureCoding {
+// Immutable value container crossing actor boundaries in the sampling flow.
+public final class TMProcessDetail: NSObject, NSSecureCoding, @unchecked Sendable {
     public static var supportsSecureCoding: Bool { true }
 
     @objc public let pid: Int32

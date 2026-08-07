@@ -84,6 +84,8 @@ struct ProcessSnapshot: Sendable {
     var timestamp: Date
     var totalMemoryBytes: UInt64
     var logicalCoreCount: Int
+    /// Command lines filled by the daemon for cross-user processes (§4.4).
+    var elevatedCommandLines: [Int32: String] = [:]
 
     var processCount: Int {
         backgroundProcesses.count + groups.reduce(0) { $0 + $1.children.count }

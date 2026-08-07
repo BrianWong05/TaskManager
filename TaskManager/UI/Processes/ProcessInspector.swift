@@ -52,7 +52,9 @@ struct ProcessInspector: View {
         switch target {
         case .process(let identity):
             let live = snapshot.flatMap { viewModel.record(for: identity, in: $0) }
-            ProcessDetailView(record: live, viewModel: viewModel)
+            ProcessDetailView(record: live,
+                              viewModel: viewModel,
+                              elevatedCommandLine: snapshot?.elevatedCommandLines[identity.pid])
         case .group(let bundlePath):
             groupDetail(bundlePath: bundlePath)
         }
@@ -137,6 +139,8 @@ private struct ProcessDetailView: View {
     @Environment(\.palette) private var palette
     let record: ProcessRecord?
     @ObservedObject var viewModel: ProcessesViewModel
+    /// Command line the daemon filled for cross-user processes (§4.4).
+    var elevatedCommandLine: String?
 
     @State private var lastRecord: ProcessRecord?
     @State private var commandLine: String?
@@ -159,9 +163,15 @@ private struct ProcessDetailView: View {
     private func cache(_ record: ProcessRecord?) {
         guard let record else { return }
         lastRecord = record
-        if commandLine == nil, !viewModel.requiresElevation(record) {
+        if commandLine == nil, record.detailLevel == .full {
             commandLine = LibProcProcessCollector().commandLine(for: record.pid)
         }
+    }
+
+    /// Command line resolution: same-user reads KERN_PROCARGS2 locally;
+    /// daemon-filled rows carry it in the snapshot (§4.4).
+    private func resolvedCommandLine(_ record: ProcessRecord) -> String? {
+        record.detailLevel == .elevated ? elevatedCommandLine : commandLine
     }
 
     /// Nine fields in two capability tiers (spec §3.3): tier one is free for
@@ -189,7 +199,7 @@ private struct ProcessDetailView: View {
                     InspectorField("Disk I/O", "Requires elevation")
                 } else {
                     InspectorField("Memory RSS", Format.bytes(record.residentMemory))
-                    InspectorField("Command line", commandLine ?? "—", multiline: true)
+                    InspectorField("Command line", resolvedCommandLine(record) ?? "—", multiline: true)
                     InspectorField("Disk I/O",
                                    "Read \(Format.rate(record.diskReadRate)) · Write \(Format.rate(record.diskWriteRate))")
                 }

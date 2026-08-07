@@ -566,6 +566,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Daemon/Daemon-Bridging-Header.h";
 				INFOPLIST_FILE = Daemon/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -587,6 +588,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_HARDENED_RUNTIME = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "Daemon/Daemon-Bridging-Header.h";
 				INFOPLIST_FILE = Daemon/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -71,6 +71,9 @@ final class ProcessesViewModel: ObservableObject {
         static let ascending = "processes.sortAscending"
     }
 
+    /// Elevation routing for cross-user termination (spec §4.5 → §6 daemon).
+    weak var elevation: ElevationManager?
+
     private let currentUid = getuid()
 
     init() {
@@ -202,7 +205,7 @@ final class ProcessesViewModel: ObservableObject {
         switch selection {
         case .process(let identity):
             if let record = record(for: identity, in: snapshot) {
-                signal(record, SIGTERM)
+                terminate(record, mode: .graceful)
             }
         case .group(let bundlePath):
             endAll(in: bundlePath, snapshot: snapshot)
@@ -216,12 +219,12 @@ final class ProcessesViewModel: ObservableObject {
         case .process(let identity):
             if let record = record(for: identity, in: snapshot),
                !record.isProtected {
-                signal(record, SIGKILL)
+                terminate(record, mode: .force)
             }
         case .group(let bundlePath):
             if let group = snapshot.groups.first(where: { $0.bundlePath == bundlePath }) {
                 for child in group.children where !child.isProtected {
-                    signal(child, SIGKILL)
+                    terminate(child, mode: .force)
                 }
             }
         }
@@ -230,7 +233,7 @@ final class ProcessesViewModel: ObservableObject {
     func endAll(in bundlePath: String, snapshot: ProcessSnapshot) {
         guard let group = snapshot.groups.first(where: { $0.bundlePath == bundlePath }) else { return }
         for child in group.children where !child.isProtected {
-            signal(child, SIGTERM)
+            terminate(child, mode: .graceful)
         }
     }
 
@@ -259,9 +262,31 @@ final class ProcessesViewModel: ObservableObject {
         return nil
     }
 
-    private func signal(_ record: ProcessRecord, _ sig: Int32) {
+    /// Termination routing (spec §3.3, §4.5): own-user processes get a local
+    /// signal; cross-user processes go through the daemon when Elevation is
+    /// active, otherwise the failure dialog explains why.
+    private func terminate(_ record: ProcessRecord, mode: TMTerminationMode) {
         guard !record.isProtected else { return }
-        let result = kill(record.pid, sig)
+        if record.detailLevel == .requiresElevation || record.uid != currentUid {
+            guard let elevation, elevation.isActive else {
+                terminationError = TerminationError(
+                    processName: record.name, pid: record.pid,
+                    reason: "Requires elevation — set up the background service in Settings, then retry.")
+                return
+            }
+            let client = elevation.client
+            Task {
+                let result = await client.terminate(pid: record.pid, mode: mode)
+                if !result.success {
+                    terminationError = TerminationError(
+                        processName: record.name, pid: record.pid,
+                        reason: result.reason ?? "Termination failed")
+                }
+            }
+            return
+        }
+        let signal = mode == .force ? SIGKILL : SIGTERM
+        let result = kill(record.pid, signal)
         if result != 0 {
             let code = errno
             let reason: String
@@ -283,7 +308,7 @@ final class ProcessesViewModel: ObservableObject {
     /// Cross-user rows gate extended fields until Elevation fills them
     /// (spec §4.5).
     func requiresElevation(_ record: ProcessRecord) -> Bool {
-        record.uid != currentUid
+        record.detailLevel == .requiresElevation
     }
 
     // MARK: Clipboard (spec §3.3 — Copy: name + PID + path)

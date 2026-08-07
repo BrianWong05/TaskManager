@@ -177,6 +177,9 @@ struct ProcessesTab: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
+        .onAppear {
+            viewModel.elevation = appModel.elevation
+        }
     }
 
     // MARK: Column header
