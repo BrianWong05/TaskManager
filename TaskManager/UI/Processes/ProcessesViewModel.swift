@@ -289,6 +289,34 @@ final class ProcessesViewModel: ObservableObject {
         return nil
     }
 
+    /// Copy for the pending Force Quit confirmation (spec §3.3 — the
+    /// dialog must state name and PID). A group with a single killable
+    /// child reads like a plain process; multi-child groups list every
+    /// target PID. Empty when there is nothing to confirm.
+    func forceQuitMessage(for pending: ProcessSelection?, in snapshot: ProcessSnapshot?) -> String {
+        guard let pending, let snapshot else { return "" }
+        switch pending {
+        case .process(let identity):
+            guard let record = record(for: identity, in: snapshot) else { return "" }
+            return singleProcessMessage(record)
+        case .group(let bundlePath):
+            guard let group = snapshot.groups.first(where: { $0.bundlePath == bundlePath }) else {
+                return ""
+            }
+            let targets = group.children.filter { !$0.isProtected }
+            if let only = targets.first, targets.count == 1 {
+                return singleProcessMessage(only)
+            }
+            guard !targets.isEmpty else { return "" }
+            let pids = targets.map { String($0.pid) }.joined(separator: ", ")
+            return "Force quit all \(targets.count) processes of “\(group.displayName)” (PIDs \(pids))? They will be killed immediately and unsaved data may be lost."
+        }
+    }
+
+    private func singleProcessMessage(_ record: ProcessRecord) -> String {
+        "Are you sure you want to force quit “\(record.name)” (PID \(record.pid))? The process will be killed immediately and unsaved data may be lost."
+    }
+
     /// Termination routing (spec §3.3, §4.5): own-user processes get a local
     /// signal; cross-user processes go through the daemon when Elevation is
     /// active, otherwise the failure dialog explains why.

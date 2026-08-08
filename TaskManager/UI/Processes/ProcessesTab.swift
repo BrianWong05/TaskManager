@@ -99,21 +99,7 @@ struct ProcessesTab: View {
     }
 
     private var forceQuitMessage: String {
-        guard let pending = viewModel.forceQuitPending, let snapshot else {
-            return ""
-        }
-        switch pending {
-        case .process(let identity):
-            if let record = viewModel.record(for: identity, in: snapshot) {
-                return "Are you sure you want to force quit “\(record.name)” (PID \(record.pid))? The process will be killed immediately and unsaved data may be lost."
-            }
-            return ""
-        case .group(let bundlePath):
-            if let group = snapshot.groups.first(where: { $0.bundlePath == bundlePath }) {
-                return "Force quit all \(group.children.count) processes of “\(group.displayName)”? They will be killed immediately and unsaved data may be lost."
-            }
-            return ""
-        }
+        viewModel.forceQuitMessage(for: viewModel.forceQuitPending, in: snapshot)
     }
 
     private func handleEscape() {
