@@ -13,6 +13,12 @@ final class StartupStore: ObservableObject {
     @Published var toggleErrorMessage: String?
 
     private let elevation: ElevationManager
+    /// `sfltool dumpbtm` triggers a macOS authorization prompt on every run, and
+    /// the tab reloads whenever it appears — so re-reading it per visit asked
+    /// for the password every time the user switched tabs. BTM state changes
+    /// only when the user edits Login Items in System Settings, so it is read
+    /// once per session and re-read only on explicit Refresh.
+    private var cachedBTMItems: [StartupItem]?
 
     init(elevation: ElevationManager) {
         self.elevation = elevation
@@ -20,7 +26,9 @@ final class StartupStore: ObservableObject {
 
     // MARK: Enumeration
 
-    func reload() async {
+    /// - Parameter refreshLoginItems: pass true only for a user-initiated
+    ///   Refresh; it re-runs `sfltool` and so re-prompts for authorization.
+    func reload(refreshLoginItems: Bool = false) async {
         isLoading = true
         defer { isLoading = false }
         var collected: [StartupItem] = []
@@ -48,7 +56,11 @@ final class StartupStore: ObservableObject {
             }
         }
 
-        collected += await enumerateBTM()
+        if refreshLoginItems { cachedBTMItems = nil }
+        if cachedBTMItems == nil {
+            cachedBTMItems = await enumerateBTM()
+        }
+        collected += cachedBTMItems ?? []
         items = collected
     }
 

@@ -38,7 +38,9 @@ struct StartupTab: View {
                 .foregroundStyle(palette.textSecondary)
             Spacer()
             Button {
-                Task { await store.reload() }
+                // User-initiated: re-read Login Items too, accepting the
+                // authorization prompt sfltool triggers.
+                Task { await store.reload(refreshLoginItems: true) }
             } label: {
                 Label("Refresh", systemImage: "arrow.clockwise")
                     .font(.system(size: 12))
