@@ -59,7 +59,12 @@ struct ProcessRecord: Identifiable, Sendable, Equatable {
     var pid: Int32 { identity.pid }
 
     var totalDiskRate: Double { diskReadRate + diskWriteRate }
-    var totalNetRate: Double { (netDownRate ?? 0) + (netUpRate ?? 0) }
+    /// nil when per-process network is unavailable, so the column can show `–`
+    /// rather than a fabricated 0 B/s (spec §4.5).
+    var totalNetRate: Double? {
+        guard let netDownRate, let netUpRate else { return nil }
+        return netDownRate + netUpRate
+    }
 }
 
 /// App Group: all processes whose executable resolves into the same .app
@@ -73,7 +78,12 @@ struct AppGroup: Identifiable, Sendable {
     var totalCPUPercent: Double { children.reduce(0) { $0 + $1.cpuPercent } }
     var totalMemory: UInt64 { children.reduce(0) { $0 + $1.residentMemory } }
     var totalDiskRate: Double { children.reduce(0) { $0 + $1.totalDiskRate } }
-    var totalNetRate: Double { children.reduce(0) { $0 + $1.totalNetRate } }
+    /// nil when NO child has network data — the group then shows `–` like its
+    /// children instead of summing unavailable values to 0 (spec §4.5).
+    var totalNetRate: Double? {
+        let rates = children.compactMap(\.totalNetRate)
+        return rates.isEmpty ? nil : rates.reduce(0, +)
+    }
     var containsProtected: Bool { children.contains(where: \.isProtected) }
 }
 

@@ -121,3 +121,33 @@ private func sample(pid: Int32, startUsec: UInt64 = 1_000_000, name: String = "p
         #expect(degraded.backgroundProcesses[0].netUpRate == nil)
     }
 }
+
+@Suite struct NetworkAvailabilityTests {
+    private func record(down: Double?, up: Double?) -> ProcessRecord {
+        ProcessRecord(
+            identity: ProcessIdentity(pid: 1, startUsec: 1),
+            name: "p", path: "/p", bundlePath: nil, uid: 501, userName: "me", ppid: 1,
+            status: .running, isProtected: false, cpuPercent: 0, residentMemory: 0,
+            diskReadRate: 0, diskWriteRate: 0, netDownRate: down, netUpRate: up,
+            detailLevel: .full)
+    }
+
+    /// Unavailable per-process network must stay nil so the column renders `–`,
+    /// not a fabricated 0 B/s (spec §4.5).
+    @Test func unavailableNetworkIsNilNotZero() {
+        #expect(record(down: nil, up: nil).totalNetRate == nil)
+        #expect(record(down: 10, up: 5).totalNetRate == 15)
+    }
+
+    /// A group of unavailable children is itself unavailable; a group with any
+    /// data sums what it has.
+    @Test func groupNetworkIsNilOnlyWhenNoChildHasData() {
+        let none = AppGroup(bundlePath: "/A.app", displayName: "A",
+                            children: [record(down: nil, up: nil), record(down: nil, up: nil)])
+        #expect(none.totalNetRate == nil)
+
+        let some = AppGroup(bundlePath: "/B.app", displayName: "B",
+                            children: [record(down: nil, up: nil), record(down: 3, up: 4)])
+        #expect(some.totalNetRate == 7)
+    }
+}

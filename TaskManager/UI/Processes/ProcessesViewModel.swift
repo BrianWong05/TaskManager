@@ -154,7 +154,7 @@ final class ProcessesViewModel: ObservableObject {
         case .cpu: return group.totalCPUPercent
         case .memory: return Double(group.totalMemory)
         case .disk: return group.totalDiskRate
-        case .network: return group.totalNetRate
+        case .network: return group.totalNetRate ?? 0 // unavailable sorts last
         case .gpu: return 0
         }
     }
@@ -165,7 +165,7 @@ final class ProcessesViewModel: ObservableObject {
         case .cpu: return record.cpuPercent
         case .memory: return Double(record.residentMemory)
         case .disk: return record.totalDiskRate
-        case .network: return record.totalNetRate
+        case .network: return record.totalNetRate ?? 0 // unavailable sorts last
         }
     }
 

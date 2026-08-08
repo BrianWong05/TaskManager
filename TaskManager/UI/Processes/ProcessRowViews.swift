@@ -100,7 +100,7 @@ private struct GroupRow: View {
             metricCell(Format.rate(group.totalDiskRate), tier: .none)
                 .frame(width: ProcessColumns.diskWidth, alignment: .trailing)
 
-            metricCell(Format.rate(group.totalNetRate), tier: .none)
+            metricCell(group.totalNetRate.map(Format.rate) ?? "–", tier: .none)
                 .frame(width: ProcessColumns.networkWidth, alignment: .trailing)
 
             Text("–") // per-process GPU unavailable on macOS (spec §4.5)
