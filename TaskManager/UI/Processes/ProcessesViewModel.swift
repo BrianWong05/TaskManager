@@ -55,9 +55,18 @@ struct TerminationError: Identifiable {
 final class ProcessesViewModel: ObservableObject {
     // MARK: Published state
 
-    @Published var searchText = ""
+    @Published var searchText = "" {
+        didSet {
+            // Every query change restarts the auto-expand cycle (spec §3.3),
+            // so per-group collapse overrides never survive a new query.
+            if searchText != oldValue { searchCollapsed.removeAll() }
+        }
+    }
     @Published var selection: ProcessSelection?
     @Published var expandedGroups: Set<String> = []
+    /// Groups the user explicitly collapsed while a search is active —
+    /// overrides the search auto-expansion (spec §3.3).
+    @Published var searchCollapsed: Set<String> = []
     @Published var sortColumn: ProcessSortColumn
     @Published var sortAscending: Bool
     @Published var inspectorTarget: ProcessSelection?
@@ -106,7 +115,7 @@ final class ProcessesViewModel: ObservableObject {
     /// visible and is auto-expanded.
     func displayRows(for snapshot: ProcessSnapshot?) -> [ProcessDisplayRow] {
         guard let snapshot else { return [] }
-        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        let query = activeQuery
 
         var groups = snapshot.groups
         var background = snapshot.backgroundProcesses
@@ -124,10 +133,11 @@ final class ProcessesViewModel: ObservableObject {
 
         var rows: [ProcessDisplayRow] = []
         for group in groups {
-            // Search hit inside the group forces expansion (spec §3.3).
+            // Search hit inside the group forces expansion (spec §3.3),
+            // unless the user explicitly collapsed it during the search.
             let expanded = query.isEmpty
                 ? expandedGroups.contains(group.bundlePath)
-                : true
+                : !searchCollapsed.contains(group.bundlePath)
             rows.append(.group(group, expanded: expanded))
             if expanded {
                 var children = group.children
@@ -140,11 +150,28 @@ final class ProcessesViewModel: ObservableObject {
     }
 
     func toggleExpanded(_ group: AppGroup) {
-        if expandedGroups.contains(group.bundlePath) {
-            expandedGroups.remove(group.bundlePath)
+        if activeQuery.isEmpty {
+            if expandedGroups.contains(group.bundlePath) {
+                expandedGroups.remove(group.bundlePath)
+            } else {
+                expandedGroups.insert(group.bundlePath)
+            }
         } else {
-            expandedGroups.insert(group.bundlePath)
+            // During search groups are auto-expanded; the chevron records
+            // an explicit override instead of touching the regular state.
+            if searchCollapsed.contains(group.bundlePath) {
+                searchCollapsed.remove(group.bundlePath)
+            } else {
+                searchCollapsed.insert(group.bundlePath)
+            }
         }
+    }
+
+    /// Trimmed, lowercased search text; empty means no active search.
+    /// Single source of truth for "is a search active" across the view
+    /// model — rows, toggles and the override lifecycle all read this.
+    private var activeQuery: String {
+        searchText.trimmingCharacters(in: .whitespaces).lowercased()
     }
 
     private func groupMetric(_ group: AppGroup) -> Double {

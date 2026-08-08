@@ -61,18 +61,15 @@ private struct GroupRow: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            // The whole name area — chevron, icon and label — is the
+            // expand/collapse target: one tap toggles the group and selects
+            // it (Win11 parity). Kept as a single gesture instead of a nested
+            // Button, which the row-level tap gesture can intercept on macOS.
             HStack(spacing: 6) {
-                Button {
-                    viewModel.toggleExpanded(group)
-                } label: {
-                    Image(systemName: expanded ? "chevron.down" : "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(palette.textSecondary)
-                        // 20pt frame is the click target; nothing is drawn around it.
-                        .frame(width: 20, height: 20)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+                Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(palette.textSecondary)
+                    .frame(width: 20, height: 20)
                 Image(nsImage: IconCache.shared.icon(forBundlePath: group.bundlePath))
                     .resizable()
                     .frame(width: 18, height: 18)
@@ -85,38 +82,45 @@ private struct GroupRow: View {
                     .foregroundStyle(palette.textSecondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                viewModel.toggleExpanded(group)
+                onSelect()
+            }
 
-            Text(group.aggregateStatus.rawValue)
-                .font(.system(size: 12))
-                .foregroundStyle(palette.textSecondary)
-                .frame(width: ProcessColumns.statusWidth, alignment: .leading)
+            // Metric area: tapping selects the group without toggling it.
+            HStack(spacing: 0) {
+                Text(group.aggregateStatus.rawValue)
+                    .font(.system(size: 12))
+                    .foregroundStyle(palette.textSecondary)
+                    .frame(width: ProcessColumns.statusWidth, alignment: .leading)
 
-            metricCell(Format.cpu(group.totalCPUPercent),
-                       tier: cpuHeatTier(percent: group.totalCPUPercent,
-                                         coreCount: snapshot?.logicalCoreCount ?? 1))
-                .frame(width: ProcessColumns.cpuWidth, alignment: .trailing)
+                metricCell(Format.cpu(group.totalCPUPercent),
+                           tier: cpuHeatTier(percent: group.totalCPUPercent,
+                                             coreCount: snapshot?.logicalCoreCount ?? 1))
+                    .frame(width: ProcessColumns.cpuWidth, alignment: .trailing)
 
-            metricCell(Format.bytes(group.totalMemory),
-                       tier: memoryHeatTier(bytes: group.totalMemory,
-                                            totalBytes: snapshot?.totalMemoryBytes ?? 0))
-                .frame(width: ProcessColumns.memoryWidth, alignment: .trailing)
+                metricCell(Format.bytes(group.totalMemory),
+                           tier: memoryHeatTier(bytes: group.totalMemory,
+                                                totalBytes: snapshot?.totalMemoryBytes ?? 0))
+                    .frame(width: ProcessColumns.memoryWidth, alignment: .trailing)
 
-            metricCell(Format.rate(group.totalDiskRate), tier: .none)
-                .frame(width: ProcessColumns.diskWidth, alignment: .trailing)
+                metricCell(Format.rate(group.totalDiskRate), tier: .none)
+                    .frame(width: ProcessColumns.diskWidth, alignment: .trailing)
 
-            metricCell(group.totalNetRate.map(Format.rate) ?? "–", tier: .none)
-                .frame(width: ProcessColumns.networkWidth, alignment: .trailing)
+                metricCell(group.totalNetRate.map(Format.rate) ?? "–", tier: .none)
+                    .frame(width: ProcessColumns.networkWidth, alignment: .trailing)
 
-            Text("–") // per-process GPU unavailable on macOS (spec §4.5)
-                .font(.system(size: 12))
-                .foregroundStyle(palette.textSecondary)
-                .frame(width: ProcessColumns.gpuWidth, alignment: .trailing)
+                Text("–") // per-process GPU unavailable on macOS (spec §4.5)
+                    .font(.system(size: 12))
+                    .foregroundStyle(palette.textSecondary)
+                    .frame(width: ProcessColumns.gpuWidth, alignment: .trailing)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { onSelect() }
         }
         .padding(.vertical, 5)
-        .modifier(RowChrome(isSelected: isSelected))
-        .onTapGesture {
-            onSelect()
-        }
+        .background(isSelected ? palette.accentSoft : .clear)
         .contextMenu {
             Button("End all in group") {
                 if let snapshot {
