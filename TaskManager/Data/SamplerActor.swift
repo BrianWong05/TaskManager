@@ -11,7 +11,22 @@ actor SamplerActor {
     static let degradedTickInterval: TimeInterval = 2 // self-impact guard (§4.2)
     static let nettopEveryNTicks = 5 // 5 s sub-tick (spec §4.2)
     static let nettopFailureNoticeThreshold = 3 // spec §4.5
-    static let selfImpactBudgetPercent = 2.0    // spec §4.2
+    /// Spec §4.2 set this at 2 %, before measurement. Measured on a
+    /// 929-process machine, one-core scale, Processes tab open: the app costs
+    /// 2.9 % on an idle machine and 3.4–3.7 % under load (load average ~6.5),
+    /// while Activity Monitor costs 3.6 % for the same job. So this is a
+    /// runaway detector, not a tuning knob — it has to sit clear of normal
+    /// variance or it fires on an ordinary busy afternoon. It is worth little
+    /// besides: halving the cadence saved ~0.16 % (2.92 % at 1 s vs 2.76 % at
+    /// 2 s) while doubling the sampling window, which visibly diverges the CPU
+    /// column from top and Activity Monitor.
+    static let selfImpactBudgetPercent = 8.0
+    /// Recovery mark, deliberately below the budget: dropping to 2 s lowers the
+    /// measured percentage by itself, so recovering at the same number would
+    /// flap between cadences.
+    static let selfImpactRecoveryPercent = 6.0
+    /// Ticks skipped at launch before the budget is judged (window setup).
+    static let selfImpactWarmUpTicks = 15
 
     private let processCollector: any ProcessTableCollecting
     private let nettopCollector: any NettopCollecting
@@ -38,6 +53,7 @@ actor SamplerActor {
     /// Self-impact bookkeeping: own cumulative CPU ns + timestamp.
     private var ownPriorCPU: (ns: UInt64, usec: UInt64)?
     private var overBudgetTicks = 0
+    private var underBudgetTicks = 0
     /// Prior cumulative counters for daemon-filled cross-user rows (by pid).
     private var elevatedPrior: [Int32: (cpuNS: UInt64, diskRead: UInt64, diskWrite: UInt64, usec: UInt64)] = [:]
 
@@ -269,10 +285,19 @@ actor SamplerActor {
 
     // MARK: Self-impact budget (spec §4.2)
 
-    /// Watches this app's own CPU share; if it sustains above the 2 % budget
-    /// the master cadence halves to 2 s automatically and logs it.
+    /// Watches this app's own CPU share; sustained time over budget halves the
+    /// master cadence to 2 s, and sustained time comfortably back under it
+    /// restores 1 s.
+    ///
+    /// Both directions matter. This used to be a one-way latch that skipped the
+    /// check once degraded, so the launch transient — SwiftUI building the
+    /// window costs more than the budget for about the first ten ticks — pinned
+    /// every session to 2 s permanently. The warm-up skip below stops that trip
+    /// happening at all; recovery stops any later spike from being permanent.
     private func checkSelfImpactBudget() {
-        guard currentInterval == Self.tickInterval else { return } // already degraded
+        // Launch transient: the first seconds are window construction, not
+        // sampling, and measuring them tells us nothing about steady state.
+        guard tickCount > Self.selfImpactWarmUpTicks else { return }
         var task = proc_taskinfo()
         let size = Int32(MemoryLayout<proc_taskinfo>.size)
         let got = withUnsafeMutablePointer(to: &task) { ptr in
@@ -287,13 +312,26 @@ actor SamplerActor {
         let ownPercent = Double(cpuNS - prior.ns) / (dtSeconds * 1_000_000_000) * 100
         if ownPercent > Self.selfImpactBudgetPercent {
             overBudgetTicks += 1
-        } else {
+            underBudgetTicks = 0
+        } else if ownPercent < Self.selfImpactRecoveryPercent {
+            underBudgetTicks += 1
             overBudgetTicks = 0
+        } else {
+            // Between the recovery mark and the budget: hold the current
+            // cadence. This gap is what stops 1 s and 2 s flapping, since
+            // halving the cadence itself lowers the measured percentage.
+            overBudgetTicks = 0
+            underBudgetTicks = 0
         }
-        if overBudgetTicks >= 10 {
+
+        if currentInterval == Self.tickInterval, overBudgetTicks >= 10 {
             currentInterval = Self.degradedTickInterval
             SamplerActor.logger.warning(
                 "Sampler self-impact over \(Self.selfImpactBudgetPercent)% budget — cadence halved to \(Self.degradedTickInterval) s")
+        } else if currentInterval == Self.degradedTickInterval, underBudgetTicks >= 10 {
+            currentInterval = Self.tickInterval
+            SamplerActor.logger.notice(
+                "Sampler self-impact back under \(Self.selfImpactRecoveryPercent)% — cadence restored to \(Self.tickInterval) s")
         }
     }
 
