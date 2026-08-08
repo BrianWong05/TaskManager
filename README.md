@@ -52,11 +52,44 @@ Privileged paths cannot be unit-tested; run these against a **signed** build (se
 4. Kill another user's/root process (daemon active): succeeds; `/Library/Application Support/TaskManager/audit.log` gains a line.
 5. SIP process (e.g. launchd): controls greyed, "Protected by the system".
 6. Disable the daemon in Login Items while running: the app transitions to degraded mode without crashing (within ~10 s).
-7. Signature-expiry simulation (let the free signature lapse, rebuild/re-sign, then Settings ▸ Retry setup): full function restored.
-8. nettop failure simulation (`sudo mv /usr/bin/nettop /usr/bin/nettop.bak`): Network column shows `–`, then the "system-wide network only" notice after 3 failures; restoring returns data on the next 5 s tick.
+7. Signature-expiry simulation — forcing the state is easier than waiting for it (see below): the status bar reads **"signature expired"** (distinct from "not set up"), then Settings ▸ Retry setup restores full function.
+8. nettop failure simulation (see below): Network column shows `–`, then the "system-wide network only" notice after 3 failures; restoring returns data on the next sub-tick.
 9. Startup tab: user LaunchAgents toggle without prompts; system daemons toggle through the daemon; BTM items read-only with "Open System Settings".
 10. Mini monitor toggle off hides the icon/panel; self-impact stays under budget (CPU <8 %, RAM <150 MB) with the window open.
 
 > The CPU figure was revised from 2 % to 8 % after measurement — spec §4.2 holds the canonical numbers and reasoning.
 >
 > CPU percentages here are on Activity Monitor's scale (100 % = one busy core), so compare against Activity Monitor or `top` — **not** against htop, which is commonly configured to divide by core count and will read ~14× lower on a 14-core machine.
+
+### How to trigger items 7 and 8
+
+Both items were originally written with steps that do not work on a current
+system. These methods do.
+
+**Item 7 — signature expiry.** Waiting for the signature to lapse may never
+happen: an Apple Development certificate is valid for about a year, and with no
+entitlements requiring a provisioning profile there is no 7-day profile to
+expire. What matters is the *state* — registered but not answering — so force it
+directly:
+
+```bash
+sudo launchctl bootout system/com.brianwong.taskmanager.daemon
+```
+
+`SMAppService` still reports `.enabled` while the mach service is gone, which is
+exactly the signature-expiry symptom. Within ~10 s the status bar should read
+"Background service signature expired". Then click **Retry setup**: the daemon
+relaunches and cross-user detail returns, in the same app session.
+
+**Item 8 — nettop failure.** `sudo mv /usr/bin/nettop …` fails on macOS with SIP
+enabled ("Operation not permitted") — `/usr/bin` is protected. Kill nettop as
+the app spawns it instead:
+
+```bash
+while :; do pkill -x nettop; sleep 0.25; done
+```
+
+Leave it running ~20 s (the notice needs 3 consecutive failed sub-ticks), then
+stop it with Ctrl-C. Per-process Network returns on the next successful sub-tick;
+the Performance tab keeps showing system-wide network throughout, which is what
+the notice points at.
