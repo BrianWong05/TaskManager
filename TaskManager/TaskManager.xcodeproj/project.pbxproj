@@ -331,18 +331,21 @@
 /* Begin PBXShellScriptBuildPhase section */
 		AA6000000000000000000004 /* Embed privileged daemon */ = {
 			isa = PBXShellScriptBuildPhase;
-			alwaysOutOfDate = 1;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			inputFileListPaths = (
 			);
 			inputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/TaskManagerDaemon",
+				"$(PROJECT_DIR)/Daemon/com.brianwong.taskmanager.daemon.plist",
 			);
 			name = "Embed privileged daemon";
 			outputFileListPaths = (
 			);
 			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/TaskManagerDaemon",
+				"$(TARGET_BUILD_DIR)/$(CONTENTS_FOLDER_PATH)/Library/LaunchDaemons/com.brianwong.taskmanager.daemon.plist",
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -513,7 +516,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 88H7RVS5GN;
 				ENABLE_HARDENED_RUNTIME = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "App/TaskManager-Bridging-Header.h";
 				INFOPLIST_FILE = App/Info.plist;
@@ -540,7 +543,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 88H7RVS5GN;
 				ENABLE_HARDENED_RUNTIME = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "App/TaskManager-Bridging-Header.h";
 				INFOPLIST_FILE = App/Info.plist;
@@ -564,7 +567,7 @@
 				CODE_SIGN_ENTITLEMENTS = Daemon/TaskManagerDaemon.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 88H7RVS5GN;
 				ENABLE_HARDENED_RUNTIME = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Daemon/Daemon-Bridging-Header.h";
 				INFOPLIST_FILE = Daemon/Info.plist;
@@ -586,7 +589,7 @@
 				CODE_SIGN_ENTITLEMENTS = Daemon/TaskManagerDaemon.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 88H7RVS5GN;
 				ENABLE_HARDENED_RUNTIME = YES;
 				SWIFT_OBJC_BRIDGING_HEADER = "Daemon/Daemon-Bridging-Header.h";
 				INFOPLIST_FILE = Daemon/Info.plist;
@@ -608,7 +611,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 88H7RVS5GN;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.brianwong.taskmanager.tests;
@@ -625,7 +628,7 @@
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 88H7RVS5GN;
 				GENERATE_INFOPLIST_FILE = YES;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.brianwong.taskmanager.tests;

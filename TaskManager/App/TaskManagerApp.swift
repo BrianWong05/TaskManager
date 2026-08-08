@@ -17,6 +17,10 @@ struct TaskManagerApp: App {
                 MainShell()
                     .environmentObject(appModel)
                     .environmentObject(appModel.settings)
+                    // PerformanceTab requires both; without them switching to
+                    // that tab traps on a missing ObservableObject.
+                    .environmentObject(appModel.snapshotStore)
+                    .environmentObject(appModel.systemStore)
             }
             .preferredColorScheme(appModel.settings.theme.colorScheme) // spec §3.7 theme
             .frame(minWidth: 860, minHeight: 520) // spec §3.2 minimum size

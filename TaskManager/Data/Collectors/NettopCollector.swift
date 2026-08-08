@@ -47,8 +47,11 @@ struct NettopCollector: NettopCollecting {
             pipe.fileHandleForReading.readabilityHandler = nil
             return nil
         }
-        // nettop -L 1 can stall briefly; bound the wait without busy-polling.
-        let deadline = Date().addingTimeInterval(3)
+        // nettop pays a fixed ~5 s startup cost before its first sample (the
+        // count from -L does not change it), so the bound must clear that with
+        // margin — a 3 s deadline killed every run and per-process network was
+        // permanently `–`. The caller runs this off the sampler actor.
+        let deadline = Date().addingTimeInterval(10)
         while process.isRunning, Date() < deadline {
             Thread.sleep(forTimeInterval: 0.05)
         }

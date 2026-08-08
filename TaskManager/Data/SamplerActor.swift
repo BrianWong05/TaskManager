@@ -26,6 +26,9 @@ actor SamplerActor {
     private var processSamplingPaused = false
     private var lastNet: [Int32: NetCounters]?
     private var nettopConsecutiveFailures = 0
+    /// A detached nettop run is outstanding; prevents overlapping runs since
+    /// one run outlives the 5 s sub-tick it was launched from.
+    private var nettopSampleInFlight = false
     /// Net rates computed at each successful nettop tick against the real
     /// elapsed time (nettop runs every 5 s — dividing its deltas by the 1 s
     /// master dt would pulse the Network column at 5×, spec §4.2).
@@ -106,32 +109,18 @@ actor SamplerActor {
     /// enumeration, reduction, net rates and the elevated batch fill.
     private func sampleProcesses(now: Date, nowUsec: UInt64) async -> ProcessSnapshot {
         // 5 s sub-tick: per-process network via nettop (spec §4.2).
-        if tickCount % Self.nettopEveryNTicks == 1 || lastNet == nil {
-            if let net = nettopCollector.sample() {
-                if let prior = netPrior {
-                    let dtSeconds = max(Double(nowUsec - prior.usec) / 1_000_000, 0.001)
-                    var rates: [Int32: (down: Double, up: Double)] = [:]
-                    for (pid, counters) in net {
-                        if let before = prior.counters[pid],
-                           counters.bytesIn >= before.bytesIn,
-                           counters.bytesOut >= before.bytesOut {
-                            rates[pid] = (down: Double(counters.bytesIn - before.bytesIn) / dtSeconds,
-                                          up: Double(counters.bytesOut - before.bytesOut) / dtSeconds)
-                        } else {
-                            rates[pid] = (down: 0, up: 0) // new or restarted process
-                        }
-                    }
-                    netRates = rates
-                }
-                netPrior = (net, nowUsec)
-                lastNet = net
-                nettopConsecutiveFailures = 0
-            } else {
-                // Stale counters would fake activity: clear while failing;
-                // the next 5 s tick retries naturally (spec §4.5).
-                lastNet = nil
-                netRates = [:]
-                nettopConsecutiveFailures += 1
+        // nettop needs ~5 s of wall clock before it emits its first sample, so
+        // it runs detached and its result is consumed later by
+        // applyNettopSample. Awaiting it inline stalls every master tick — the
+        // process table then never publishes at all (§4.2, §4.3).
+        // ponytail: one blocked pool thread per run; the in-flight guard caps
+        // it at one. Move to a dedicated queue if the pool ever starves.
+        if tickCount % Self.nettopEveryNTicks == 1, !nettopSampleInFlight {
+            nettopSampleInFlight = true
+            let collector = nettopCollector
+            Task.detached { [weak self] in
+                let net = collector.sample()
+                await self?.applyNettopSample(net)
             }
         }
         let samples = processCollector.sampleAll()
@@ -153,6 +142,40 @@ actor SamplerActor {
         }
         snapshot.networkDegraded = nettopConsecutiveFailures >= Self.nettopFailureNoticeThreshold
         return snapshot
+    }
+
+    /// Consumes one detached nettop run. Rates are computed against the
+    /// previous completed sample's timestamp — the true interval, which is
+    /// nettop's own cost, not the master tick (spec §4.2).
+    private func applyNettopSample(_ net: [Int32: NetCounters]?) {
+        nettopSampleInFlight = false
+        guard let net else {
+            // Stale counters would fake activity: clear while failing;
+            // the next sub-tick retries naturally (spec §4.5).
+            lastNet = nil
+            netRates = [:]
+            nettopConsecutiveFailures += 1
+            return
+        }
+        let nowUsec = UInt64(Date().timeIntervalSince1970 * 1_000_000)
+        if let prior = netPrior {
+            let dtSeconds = max(Double(nowUsec - prior.usec) / 1_000_000, 0.001)
+            var rates: [Int32: (down: Double, up: Double)] = [:]
+            for (pid, counters) in net {
+                if let before = prior.counters[pid],
+                   counters.bytesIn >= before.bytesIn,
+                   counters.bytesOut >= before.bytesOut {
+                    rates[pid] = (down: Double(counters.bytesIn - before.bytesIn) / dtSeconds,
+                                  up: Double(counters.bytesOut - before.bytesOut) / dtSeconds)
+                } else {
+                    rates[pid] = (down: 0, up: 0) // new or restarted process
+                }
+            }
+            netRates = rates
+        }
+        netPrior = (net, nowUsec)
+        lastNet = net
+        nettopConsecutiveFailures = 0
     }
 
     /// Merge daemon details into cross-user rows: memory + command line

@@ -55,6 +55,7 @@ final class AppModel: ObservableObject {
     @Published var mainWindowVisible = true
 
     private var settingsCancellable: AnyCancellable?
+    private var nestedStoreCancellables: [AnyCancellable] = []
 
     private(set) var miniMonitor: MiniMonitorController?
 
@@ -68,6 +69,24 @@ final class AppModel: ObservableObject {
         startupStore = StartupStore(elevation: elevation)
         snapshotStore.start { [weak systemStore] sample in
             systemStore?.apply(sample)
+        }
+        // Views observe AppModel but read through these nested
+        // ObservableObjects (appModel.elevation.status,
+        // appModel.snapshotStore.snapshot, appModel.settings.theme...).
+        // Nested changes do not reach an observer of AppModel on their own, so
+        // republish them here: without this the process table never refreshes,
+        // the §6.3 setup sheet never appears and the §6.4 status bar never
+        // updates.
+        // ponytail: republishes at the sampler's 1 Hz, so the whole shell
+        // re-renders each tick. Give the hot views their own @EnvironmentObject
+        // if that ever shows up in the §4.2 self-impact budget.
+        nestedStoreCancellables = [
+            elevation.objectWillChange,
+            snapshotStore.objectWillChange,
+            settings.objectWillChange,
+            startupStore.objectWillChange,
+        ].map { publisher in
+            publisher.sink { [weak self] _ in self?.objectWillChange.send() }
         }
         elevation.start()
         settingsCancellable = settings.$showMenuBarMonitor
