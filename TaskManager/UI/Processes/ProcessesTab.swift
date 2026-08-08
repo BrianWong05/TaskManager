@@ -23,6 +23,7 @@ struct ProcessesTab: View {
     @Environment(\.palette) private var palette
     @StateObject private var viewModel = ProcessesViewModel()
     @FocusState private var searchFocused: Bool
+    @State private var hoveredColumn: ProcessSortColumn?
 
     private var snapshot: ProcessSnapshot? { snapshotStore.snapshot }
 
@@ -217,7 +218,7 @@ struct ProcessesTab: View {
             headerCell(.gpu, title: "GPU", width: ProcessColumns.gpuWidth, alignment: .trailing)
         }
         .padding(.horizontal, 14)
-        .padding(.vertical, 6)
+        .frame(height: 34)
         .background(palette.card)
     }
 
@@ -226,21 +227,32 @@ struct ProcessesTab: View {
         Button {
             viewModel.toggleSort(column)
         } label: {
-            HStack(spacing: 3) {
+            HStack(spacing: 4) {
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(viewModel.sortColumn == column ? palette.accent : palette.textSecondary)
-                if viewModel.sortColumn == column {
-                    Image(systemName: viewModel.sortAscending ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(palette.accent)
-                }
+                // Chevron always occupies its slot (hidden when inactive) so the
+                // label doesn't shift and the click target stays stable.
+                Image(systemName: viewModel.sortColumn == column && viewModel.sortAscending
+                      ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(palette.accent)
+                    .opacity(viewModel.sortColumn == column ? 1 : 0)
             }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(hoveredColumn == column ? palette.subdued : .clear)
+            )
             .frame(maxWidth: width == nil ? .infinity : width,
                    alignment: width == nil ? .leading : (alignment == .trailing ? .trailing : .leading))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { inside in
+            hoveredColumn = inside ? column : (hoveredColumn == column ? nil : hoveredColumn)
+        }
     }
 
     // MARK: List
