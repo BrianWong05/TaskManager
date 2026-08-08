@@ -20,9 +20,13 @@ enum HeatThresholds {
     static let memoryShare: [Double] = [5, 15, 40]
 }
 
-/// CPU percent (normalized to all cores) → tier.
-func cpuHeatTier(percent: Double) -> HeatTier {
-    tier(for: percent, thresholds: HeatThresholds.cpu)
+/// CPU percent on Activity Monitor's scale (100 % = one busy core) → tier.
+/// The thresholds stay shares of the *whole machine*, so they scale with core
+/// count — otherwise on a 14-core box a process using half of one core (3.5 %
+/// of the machine) would light up the hottest tier.
+func cpuHeatTier(percent: Double, coreCount: Int) -> HeatTier {
+    let cores = Double(max(coreCount, 1))
+    return tier(for: percent, thresholds: HeatThresholds.cpu.map { $0 * cores })
 }
 
 /// Memory bytes relative to total system memory → tier.

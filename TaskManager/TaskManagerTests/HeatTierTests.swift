@@ -5,13 +5,25 @@ import Testing
 @testable import TaskManager
 
 @Suite struct HeatTierTests {
-    @Test func cpuThresholds() {
-        #expect(cpuHeatTier(percent: 0) == .none)
-        #expect(cpuHeatTier(percent: 4.9) == .none)
-        #expect(cpuHeatTier(percent: 5.1) == .tier1)
-        #expect(cpuHeatTier(percent: 15.1) == .tier2)
-        #expect(cpuHeatTier(percent: 40.1) == .tier3)
-        #expect(cpuHeatTier(percent: 99) == .tier3)
+    /// Single core: the percentages are shares of the machine directly.
+    @Test func cpuThresholdsOnOneCore() {
+        #expect(cpuHeatTier(percent: 0, coreCount: 1) == .none)
+        #expect(cpuHeatTier(percent: 4.9, coreCount: 1) == .none)
+        #expect(cpuHeatTier(percent: 5.1, coreCount: 1) == .tier1)
+        #expect(cpuHeatTier(percent: 15.1, coreCount: 1) == .tier2)
+        #expect(cpuHeatTier(percent: 40.1, coreCount: 1) == .tier3)
+        #expect(cpuHeatTier(percent: 99, coreCount: 1) == .tier3)
+    }
+
+    /// Thresholds scale with core count so a tier keeps meaning the same share
+    /// of the whole machine: on 10 cores the tiers sit at 50/150/400 %.
+    @Test func cpuThresholdsScaleWithCoreCount() {
+        #expect(cpuHeatTier(percent: 49, coreCount: 10) == .none)
+        #expect(cpuHeatTier(percent: 51, coreCount: 10) == .tier1)
+        #expect(cpuHeatTier(percent: 151, coreCount: 10) == .tier2)
+        #expect(cpuHeatTier(percent: 401, coreCount: 10) == .tier3)
+        // One fully-busy core out of 10 is only 10 % of the machine.
+        #expect(cpuHeatTier(percent: 100, coreCount: 10) == .tier1)
     }
 
     @Test func memoryTieredByShareOfTotal() {

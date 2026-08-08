@@ -88,7 +88,8 @@ private struct GroupRow: View {
                 .frame(width: ProcessColumns.statusWidth, alignment: .leading)
 
             metricCell(Format.cpu(group.totalCPUPercent),
-                       tier: cpuHeatTier(percent: group.totalCPUPercent))
+                       tier: cpuHeatTier(percent: group.totalCPUPercent,
+                                         coreCount: snapshot?.logicalCoreCount ?? 1))
                 .frame(width: ProcessColumns.cpuWidth, alignment: .trailing)
 
             metricCell(Format.bytes(group.totalMemory),
@@ -216,7 +217,8 @@ private struct ProcessRow: View {
     @ViewBuilder private var cpuCell: some View {
         if elevated {
             metricText(Format.cpu(record.cpuPercent),
-                       tier: cpuHeatTier(percent: record.cpuPercent))
+                       tier: cpuHeatTier(percent: record.cpuPercent,
+                                         coreCount: snapshot?.logicalCoreCount ?? 1))
         } else {
             gatedText
         }

@@ -196,7 +196,6 @@ actor SamplerActor {
 
         var byPid: [Int32: TMProcessDetail] = [:]
         for detail in details { byPid[detail.pid] = detail }
-        let coreCount = max(snapshot.logicalCoreCount, 1)
 
         func merge(_ record: inout ProcessRecord) {
             guard let detail = byPid[record.pid] else { return }
@@ -205,8 +204,9 @@ actor SamplerActor {
             if let prior = elevatedPrior[record.pid], nowUsec > prior.usec {
                 let dtSeconds = Double(nowUsec - prior.usec) / 1_000_000
                 if detail.cpuNanoseconds >= prior.cpuNS {
+                    // Same scale as the reducer: 100 % = one busy core.
                     record.cpuPercent = Double(detail.cpuNanoseconds - prior.cpuNS)
-                        / (dtSeconds * 1_000_000_000) / Double(coreCount) * 100
+                        / (dtSeconds * 1_000_000_000) * 100
                 }
                 if detail.diskBytesRead >= prior.diskRead {
                     record.diskReadRate = Double(detail.diskBytesRead - prior.diskRead) / dtSeconds

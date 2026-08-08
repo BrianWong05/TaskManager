@@ -18,7 +18,7 @@ private func sample(pid: Int32, startUsec: UInt64 = 1_000_000, name: String = "p
 @Suite struct ProcessTableReducerTests {
     // MARK: CPU rate deltas
 
-    @Test func cpuRateUsesDeltaOverWallTimeNormalizedByCores() {
+    @Test func cpuRateUsesDeltaOverWallTimeOnActivityMonitorScale() {
         var reducer = ProcessTableReducer(currentUid: 501)
         let first = reducer.update(
             samples: [sample(pid: 42, cpuNS: 1_000_000_000)], net: nil,
@@ -28,8 +28,9 @@ private func sample(pid: Int32, startUsec: UInt64 = 1_000_000, name: String = "p
         let second = reducer.update(
             samples: [sample(pid: 42, cpuNS: 2_000_000_000)], net: nil,
             nowUsec: 1_000_000, coreCount: 4, totalMemoryBytes: 16_000_000_000)
-        // Δ1 s of CPU over 1 s of wall on 4 cores = 25 %.
-        #expect(abs(second.backgroundProcesses[0].cpuPercent - 25.0) < 0.001)
+        // Δ1 s of CPU over 1 s of wall = one fully-busy core = 100 %,
+        // independent of core count (Activity Monitor's scale).
+        #expect(abs(second.backgroundProcesses[0].cpuPercent - 100.0) < 0.001)
     }
 
     @Test func diskRatesAreCounterDeltas() {
