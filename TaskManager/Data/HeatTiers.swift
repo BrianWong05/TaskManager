@@ -18,6 +18,10 @@ enum HeatThresholds {
     /// (Spec §3.3 prescribes "tiered by share of total system memory"; the
     /// numeric steps mirror the CPU tiers.)
     static let memoryShare: [Double] = [5, 15, 40]
+    /// One logical CPU's own utilization, for the Logical processors grid.
+    /// Deliberately not `cpu`: those are shares of the whole machine, so a
+    /// single core past 40 % of itself would sit in the top tier permanently.
+    static let core: [Double] = [25, 50, 75]
 }
 
 /// CPU percent on Activity Monitor's scale (100 % = one busy core) → tier.
@@ -27,6 +31,11 @@ enum HeatThresholds {
 func cpuHeatTier(percent: Double, coreCount: Int) -> HeatTier {
     let cores = Double(max(coreCount, 1))
     return tier(for: percent, thresholds: HeatThresholds.cpu.map { $0 * cores })
+}
+
+/// One core's own utilization (0–100 % of that core) → tier.
+func coreHeatTier(percent: Double) -> HeatTier {
+    tier(for: percent, thresholds: HeatThresholds.core)
 }
 
 /// Memory bytes relative to total system memory → tier.

@@ -18,6 +18,9 @@ final class SystemMetricsStore: ObservableObject {
     @Published var gpuHistory = RingBuffer<Double>(capacity: SystemMetricsStore.historyCapacity)    // %
     @Published private(set) var latest: SystemSample?
 
+    /// Static core → performance-level map for the grid (addendum §2).
+    let topology: CoreTopology
+
     /// Memory-pressure event badge on the Performance memory card (§3.4).
     /// Cleared automatically after 60 s without a new event.
     @Published private(set) var pressureLevel: MemoryPressureLevel?
@@ -25,7 +28,8 @@ final class SystemMetricsStore: ObservableObject {
 
     private let pressureSource: DispatchSourceMemoryPressure
 
-    init() {
+    init(topology: CoreTopology = .current()) {
+        self.topology = topology
         let source = DispatchSource.makeMemoryPressureSource(
             eventMask: [.warning, .critical], queue: .main)
         pressureSource = source

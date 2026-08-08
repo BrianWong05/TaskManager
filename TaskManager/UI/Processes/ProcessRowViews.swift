@@ -5,13 +5,24 @@
 import SwiftUI
 import AppKit
 
+/// Heat tier hues at full strength — the Logical processors segments carry
+/// their own opacity ramp, so they need the tint before it is faded.
+func heatBaseColor(_ tier: HeatTier) -> Color {
+    switch tier {
+    case .none: return .clear
+    case .tier1: return Color(red: 1.0, green: 0.82, blue: 0.47)
+    case .tier2: return Color(red: 1.0, green: 0.67, blue: 0.35)
+    case .tier3: return Color(red: 1.0, green: 0.47, blue: 0.31)
+    }
+}
+
 /// Heat tier background tints (spec §3.3, prototype palette).
 func heatColor(_ tier: HeatTier) -> Color {
     switch tier {
     case .none: return .clear
-    case .tier1: return Color(red: 1.0, green: 0.82, blue: 0.47).opacity(0.25)
-    case .tier2: return Color(red: 1.0, green: 0.67, blue: 0.35).opacity(0.45)
-    case .tier3: return Color(red: 1.0, green: 0.47, blue: 0.31).opacity(0.60)
+    case .tier1: return heatBaseColor(tier).opacity(0.25)
+    case .tier2: return heatBaseColor(tier).opacity(0.45)
+    case .tier3: return heatBaseColor(tier).opacity(0.60)
     }
 }
 

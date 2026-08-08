@@ -22,12 +22,39 @@ enum PerformanceResource: String, CaseIterable, Identifiable {
     }
 }
 
+/// CPU graph mode (per-core addendum §1.1): which chart the CPU pane draws.
+/// Implicit view state — persisted like a sort order, never a Settings option.
+enum CPUGraphMode: String, CaseIterable, Identifiable {
+    case overall
+    case perCore
+
+    static let defaultsKey = "view.cpuGraphMode"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .overall: return "Overall utilization"
+        case .perCore: return "Logical processors"
+        }
+    }
+
+    static func stored(in defaults: UserDefaults = .standard) -> CPUGraphMode {
+        defaults.string(forKey: defaultsKey).flatMap(CPUGraphMode.init(rawValue:)) ?? .overall
+    }
+
+    func store(in defaults: UserDefaults = .standard) {
+        defaults.set(rawValue, forKey: Self.defaultsKey)
+    }
+}
+
 struct PerformanceTab: View {
     @EnvironmentObject private var appModel: AppModel
     @EnvironmentObject private var systemStore: SystemMetricsStore
     @EnvironmentObject private var snapshotStore: ProcessSnapshotStore
     @Environment(\.palette) private var palette
     @State private var selected: PerformanceResource = .cpu
+    @State private var graphMode: CPUGraphMode = .stored()
 
     var body: some View {
         HStack(spacing: 0) {
@@ -70,6 +97,19 @@ struct PerformanceTab: View {
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(palette.textPrimary)
                 Spacer()
+                if selected == .cpu {
+                    // Deliberate deviation from Win11's right-click menu, for
+                    // discoverability (addendum §1.1).
+                    Picker("CPU graph mode", selection: $graphMode) {
+                        ForEach(CPUGraphMode.allCases) { mode in
+                            Text(mode.label).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 280)
+                    .onChange(of: graphMode) { mode in mode.store() }
+                }
                 if selected == .memory, let level = systemStore.pressureLevel {
                     Text(level.rawValue)
                         .font(.system(size: 11, weight: .medium))
@@ -85,11 +125,22 @@ struct PerformanceTab: View {
                 .font(.system(size: 30, weight: .light))
                 .foregroundStyle(palette.accent)
 
-            ResourceChart(
-                history: history(for: selected),
-                isPercent: isPercentResource(selected),
-                rateLabel: isRateResource(selected)
-            )
+            // Only the chart-card area changes with the CPU graph mode
+            // (addendum §1.1) — headline, stat row and side list are unchanged.
+            Group {
+                if selected == .cpu, graphMode == .perCore {
+                    LogicalProcessorsGrid(
+                        topology: systemStore.topology,
+                        current: systemStore.latest?.perCorePercent ?? []
+                    )
+                } else {
+                    ResourceChart(
+                        history: history(for: selected),
+                        isPercent: isPercentResource(selected),
+                        rateLabel: isRateResource(selected)
+                    )
+                }
+            }
             .frame(maxHeight: .infinity)
             .winCard()
 
