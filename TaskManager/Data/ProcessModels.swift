@@ -85,6 +85,14 @@ struct AppGroup: Identifiable, Sendable {
         return rates.isEmpty ? nil : rates.reduce(0, +)
     }
     var containsProtected: Bool { children.contains(where: \.isProtected) }
+    /// Aggregated status for the collapsed group row: any transitional or
+    /// stopped child dominates over "Running" (spec §3.3 Status column).
+    var aggregateStatus: ProcessStatus {
+        for notable in [ProcessStatus.starting, .exiting, .stopped] {
+            if children.contains(where: { $0.status == notable }) { return notable }
+        }
+        return .running
+    }
 }
 
 /// The flat "Background processes" section + grouped apps, one frame.

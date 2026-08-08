@@ -84,7 +84,9 @@ private struct GroupRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Text("")
+            Text(group.aggregateStatus.rawValue)
+                .font(.system(size: 12))
+                .foregroundStyle(palette.textSecondary)
                 .frame(width: ProcessColumns.statusWidth, alignment: .leading)
 
             metricCell(Format.cpu(group.totalCPUPercent),

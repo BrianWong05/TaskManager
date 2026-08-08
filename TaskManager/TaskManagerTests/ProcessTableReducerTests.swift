@@ -151,3 +151,30 @@ private func sample(pid: Int32, startUsec: UInt64 = 1_000_000, name: String = "p
         #expect(some.totalNetRate == 7)
     }
 }
+
+@Suite struct GroupStatusTests {
+    private func record(_ status: ProcessStatus) -> ProcessRecord {
+        ProcessRecord(
+            identity: ProcessIdentity(pid: 1, startUsec: 1),
+            name: "p", path: "/p", bundlePath: nil, uid: 501, userName: "me", ppid: 1,
+            status: status, isProtected: false, cpuPercent: 0, residentMemory: 0,
+            diskReadRate: 0, diskWriteRate: 0, netDownRate: nil, netUpRate: nil,
+            detailLevel: .full)
+    }
+
+    /// The collapsed group row shows an aggregate status: any transitional or
+    /// stopped child dominates over "Running" (spec §3.3).
+    @Test func aggregateStatusIsNotableWhenNotAllRunning() {
+        let allRunning = AppGroup(bundlePath: "/A.app", displayName: "A",
+                                  children: [record(.running), record(.running)])
+        #expect(allRunning.aggregateStatus == .running)
+
+        let withStopped = AppGroup(bundlePath: "/B.app", displayName: "B",
+                                   children: [record(.running), record(.stopped)])
+        #expect(withStopped.aggregateStatus == .stopped)
+
+        let withStarting = AppGroup(bundlePath: "/C.app", displayName: "C",
+                                    children: [record(.running), record(.starting)])
+        #expect(withStarting.aggregateStatus == .starting)
+    }
+}
