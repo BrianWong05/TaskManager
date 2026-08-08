@@ -11,15 +11,10 @@ actor SamplerActor {
     static let degradedTickInterval: TimeInterval = 2 // self-impact guard (§4.2)
     static let nettopEveryNTicks = 5 // 5 s sub-tick (spec §4.2)
     static let nettopFailureNoticeThreshold = 3 // spec §4.5
-    /// Spec §4.2 set this at 2 %, before measurement. Measured on a
-    /// 929-process machine, one-core scale, Processes tab open: the app costs
-    /// 2.9 % on an idle machine and 3.4–3.7 % under load (load average ~6.5),
-    /// while Activity Monitor costs 3.6 % for the same job. So this is a
-    /// runaway detector, not a tuning knob — it has to sit clear of normal
-    /// variance or it fires on an ordinary busy afternoon. It is worth little
-    /// besides: halving the cadence saved ~0.16 % (2.92 % at 1 s vs 2.76 % at
-    /// 2 s) while doubling the sampling window, which visibly diverges the CPU
-    /// column from top and Activity Monitor.
+    /// Runaway detector, not a tuning knob: set clear of normal variance so it
+    /// only fires on genuinely pathological sampling. Spec §4.2 holds the
+    /// canonical measurements and reasoning behind 8 %/6 % — do not re-derive
+    /// the numbers here, that duplication is how the copies diverged before.
     static let selfImpactBudgetPercent = 8.0
     /// Recovery mark, deliberately below the budget: dropping to 2 s lowers the
     /// measured percentage by itself, so recovering at the same number would
@@ -100,7 +95,7 @@ actor SamplerActor {
         tickCount += 1
         checkSelfImpactBudget()
         let now = Date()
-        let nowUsec = UInt64(now.timeIntervalSince1970 * 1_000_000)
+        let nowUsec = now.wallUsec
 
         // Process-level section — paused when nothing is visible (spec §4.2).
         var snapshot: ProcessSnapshot? = nil
@@ -173,7 +168,7 @@ actor SamplerActor {
             nettopConsecutiveFailures += 1
             return
         }
-        let nowUsec = UInt64(Date().timeIntervalSince1970 * 1_000_000)
+        let nowUsec = Date().wallUsec
         if let prior = netPrior {
             let dtSeconds = max(Double(nowUsec - prior.usec) / 1_000_000, 0.001)
             var rates: [Int32: (down: Double, up: Double)] = [:]
@@ -220,9 +215,9 @@ actor SamplerActor {
             if let prior = elevatedPrior[record.pid], nowUsec > prior.usec {
                 let dtSeconds = Double(nowUsec - prior.usec) / 1_000_000
                 if detail.cpuNanoseconds >= prior.cpuNS {
-                    // Same scale as the reducer: 100 % = one busy core.
-                    record.cpuPercent = Double(detail.cpuNanoseconds - prior.cpuNS)
-                        / (dtSeconds * 1_000_000_000) * 100
+                    record.cpuPercent = cpuPercent(
+                        deltaNanoseconds: detail.cpuNanoseconds - prior.cpuNS,
+                        overSeconds: dtSeconds)
                 }
                 if detail.diskBytesRead >= prior.diskRead {
                     record.diskReadRate = Double(detail.diskBytesRead - prior.diskRead) / dtSeconds
@@ -303,13 +298,14 @@ actor SamplerActor {
         let got = withUnsafeMutablePointer(to: &task) { ptr in
             proc_pidinfo(getpid(), PROC_PIDTASKINFO, 0, ptr, size)
         }
-        let nowUsec = UInt64(Date().timeIntervalSince1970 * 1_000_000)
+        let nowUsec = Date().wallUsec
         guard got == size else { return }
         let cpuNS = machTimeToNanoseconds(task.pti_total_user &+ task.pti_total_system)
         defer { ownPriorCPU = (cpuNS, nowUsec) }
         guard let prior = ownPriorCPU, nowUsec > prior.usec else { return }
         let dtSeconds = Double(nowUsec - prior.usec) / 1_000_000
-        let ownPercent = Double(cpuNS - prior.ns) / (dtSeconds * 1_000_000_000) * 100
+        let ownPercent = cpuPercent(deltaNanoseconds: cpuNS - prior.ns,
+                                    overSeconds: dtSeconds)
         if ownPercent > Self.selfImpactBudgetPercent {
             overBudgetTicks += 1
             underBudgetTicks = 0
@@ -336,4 +332,9 @@ actor SamplerActor {
     }
 
     private static let logger = Logger(subsystem: "com.brianwong.taskmanager", category: "Sampler")
+}
+
+private extension Date {
+    /// Wall-clock microseconds — the timestamp unit for all rate math here.
+    var wallUsec: UInt64 { UInt64(timeIntervalSince1970 * 1_000_000) }
 }

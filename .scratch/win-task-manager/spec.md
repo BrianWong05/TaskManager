@@ -75,7 +75,7 @@ Every system-data collector sits behind a protocol so unit tests can inject mock
 
 **Sorting**: single-column; header click cycles column + direction (arrow indicator); default CPU descending; choice persists across sessions.
 
-**Heat coloring**: CPU and Memory columns only, three tiers of background tint — CPU thresholds >5% / >15% / >40%; Memory tiered by share of total system memory.
+**Heat coloring**: CPU and Memory columns only, three tiers of background tint — CPU thresholds >5% / >15% / >40% *of the whole machine*; Memory tiered by share of total system memory. Because CPU% is on the one-core scale (§4.1), the CPU thresholds are multiplied by the logical core count at evaluation (e.g. 70/210/560% on 14 cores) so a tier keeps meaning the same share of total capacity.
 
 **Context menu** (process row): End task / Force Quit / Show in Finder / Show Details / Copy (name + PID + path). "Show in Finder" disabled for processes without a backing bundle. App Group rows additionally get "End all in group".
 
@@ -145,12 +145,13 @@ No refresh-rate knob — cadence is internal behavior (§5.1).
 
 - Identity = **PID + start timestamp** composite key (start time from `kinfo_proc`/`PROC_PIDTBSDINFO`). Protects against PID reuse; vanished processes are dropped immediately.
 - App Grouping = `.app` bundle extracted from `proc_pidpath` output; group metrics are sums of children. Icon/display-name resolution is cached and refreshed only on process-table changes — never per tick.
-- Rates: CPU% = Δcpu_ns / Δwall_ns / core count; disk/network rates = deltas of cumulative counters between samples.
+- Rates: CPU% = Δcpu_ns / Δwall_ns on **Activity Monitor's scale** — 100% = one fully-busy core, so multi-threaded processes exceed 100%; disk/network rates = deltas of cumulative counters between samples.
+  - *Revised 2026-08-08 (user decision):* originally Δcpu_ns / Δwall_ns / core count (the Windows convention). Changed so the CPU column agrees with Activity Monitor and `top` on the same machine. Note `pti_total_user`/`pti_total_system` are Mach time units, not nanoseconds — convert via `mach_timebase_info` (Shared/MachTime.swift) or every percentage reads ~41.7× low on Apple Silicon.
 
 ### 4.2 Sampling & history
 
 - **1 s master tick**: process table, CPU, memory, disk I/O, system metrics.
-- **5 s sub-tick**: per-process network (nettop spawn).
+- **~5 s sub-tick**: per-process network (nettop spawn). Best-effort: nettop itself takes ~5 s to produce a sample and overlapping runs are skipped, so the effective refresh is 5–10 s.
 - Window hidden AND menu-bar monitor disabled/hidden → process-level sampling pauses; system-level sampling continues.
 - **History**: uniform ring buffers, 60 samples × 1 s per resource (CPU / memory / disk / network / GPU). Ephemeral — cleared on restart (Win11 parity).
 - **Self-impact budget**: sampler CPU <8% average, app memory <150MB. If exceeded for 10 consecutive ticks: halve cadence to 2 s and log it; restore 1 s once back under 6% for 10 consecutive ticks. First 15 ticks after launch are not judged (window construction).
@@ -159,7 +160,7 @@ No refresh-rate knob — cadence is internal behavior (§5.1).
 
 ### 4.3 Concurrency
 
-- Dedicated `SamplerActor` performs all sampling serially off the main thread; publishes immutable `ProcessSnapshot` values to `@MainActor` in one hop per tick. Main window and menu-bar panel render the same snapshot. The nettop task lives inside the same actor at lower frequency.
+- Dedicated `SamplerActor` performs all sampling serially off the main thread; publishes immutable `ProcessSnapshot` values to `@MainActor` in one hop per tick. Main window and menu-bar panel render the same snapshot. The nettop run is detached off the actor (it blocks ~5 s waiting on the child process, which would stall every master tick); only its result is consumed back on the actor.
 
 ### 4.4 Elevation in the sampling flow
 
@@ -257,7 +258,7 @@ Enumerated and shown; termination controls disabled with "Protected by the syste
 7. Signature-expiry simulation (re-sign/rebuild then retry): "Retry setup" restores full function.
 8. nettop failure simulation (rename binary): Network column shows `–`, then system-only notice after 3 failures; restoring returns data next 5 s tick.
 9. Startup tab: user LaunchAgents toggle without prompts; system daemons toggle via daemon; BTM items read-only with "Open System Settings".
-10. Menu-bar monitor toggle off hides the icon/panel; self-impact stays under budget (CPU <8%, RAM <150MB) with the window open. See §4.2 for why the CPU figure was revised from 2%.
+10. Mini monitor toggle off hides the icon/panel; self-impact stays under budget (CPU <8%, RAM <150MB) with the window open. See §4.2 for why the CPU figure was revised from 2%.
 
 ## 9. Milestones
 

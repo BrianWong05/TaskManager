@@ -43,15 +43,13 @@ struct ProcessTableReducer {
 
             let dtSeconds = previous.map { max(Double(nowUsec - $0.timestampUsec) / 1_000_000, 0.001) }
 
-            // CPU% = Δcpu_ns / Δwall_ns, on Activity Monitor's scale where
-            // 100 % is one fully-busy core and the value can exceed 100 % for a
-            // multi-threaded process. Spec §4.1 normalized this across all
-            // cores (the Windows convention); matching Activity Monitor is a
-            // deliberate deviation. New rows: 0.
+            // Activity Monitor's scale (spec §4.1, see Shared/MachTime.swift).
+            // New rows: 0.
             var cpuPercent = 0.0
             if let previous, let dtSeconds, sample.cpuNanoseconds >= previous.cpuNanoseconds {
-                let delta = Double(sample.cpuNanoseconds - previous.cpuNanoseconds)
-                cpuPercent = delta / (dtSeconds * 1_000_000_000) * 100
+                cpuPercent = TaskManager.cpuPercent(
+                    deltaNanoseconds: sample.cpuNanoseconds - previous.cpuNanoseconds,
+                    overSeconds: dtSeconds)
             }
 
             let diskReadRate = rate(now: sample.diskBytesRead, before: previous?.diskBytesRead, dt: dtSeconds)

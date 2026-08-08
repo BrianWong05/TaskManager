@@ -23,3 +23,10 @@ private let machTimebase: mach_timebase_info_data_t = {
 func machTimeToNanoseconds(_ machTime: UInt64) -> UInt64 {
     machTime * UInt64(machTimebase.numer) / UInt64(machTimebase.denom)
 }
+
+/// The one definition of the app's CPU scale (spec §4.1): percentage of a
+/// single core, Activity Monitor's convention, so 100 % = one fully-busy core
+/// and multi-threaded processes exceed 100 %.
+func cpuPercent(deltaNanoseconds: UInt64, overSeconds dtSeconds: Double) -> Double {
+    Double(deltaNanoseconds) / (dtSeconds * 1_000_000_000) * 100
+}
