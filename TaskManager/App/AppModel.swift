@@ -77,12 +77,13 @@ final class AppModel: ObservableObject {
         // republish them here: without this the process table never refreshes,
         // the §6.3 setup sheet never appears and the §6.4 status bar never
         // updates.
-        // ponytail: republishes at the sampler's 1 Hz, so the whole shell
-        // re-renders each tick. Give the hot views their own @EnvironmentObject
-        // if that ever shows up in the §4.2 self-impact budget.
+        // snapshotStore is deliberately NOT forwarded: it publishes at the
+        // sampler's 1 Hz and republishing it here re-rendered the whole shell
+        // (nav rail, status bar, every tab) once a second. ProcessesTab and
+        // UsersTab observe it directly instead. The stores below change rarely,
+        // so forwarding them costs nothing.
         nestedStoreCancellables = [
             elevation.objectWillChange,
-            snapshotStore.objectWillChange,
             settings.objectWillChange,
             startupStore.objectWillChange,
         ].map { publisher in

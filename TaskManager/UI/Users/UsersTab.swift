@@ -18,6 +18,8 @@ private struct UserRowData: Identifiable {
 
 struct UsersTab: View {
     @EnvironmentObject private var appModel: AppModel
+    /// Observed directly — see ProcessesTab (§4.2).
+    @EnvironmentObject private var snapshotStore: ProcessSnapshotStore
     @Environment(\.palette) private var palette
 
     private let currentUid = getuid()
@@ -45,7 +47,7 @@ struct UsersTab: View {
     }
 
     private var rows: [UserRowData] {
-        guard let snapshot = appModel.snapshotStore.snapshot else { return [] }
+        guard let snapshot = snapshotStore.snapshot else { return [] }
         var byUid: [UInt32: (name: String, count: Int, cpu: Double, memory: UInt64, gated: Bool)] = [:]
         var all = snapshot.backgroundProcesses
         for group in snapshot.groups { all.append(contentsOf: group.children) }

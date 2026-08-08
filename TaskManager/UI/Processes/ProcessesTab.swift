@@ -17,11 +17,14 @@ enum ProcessColumns {
 
 struct ProcessesTab: View {
     @EnvironmentObject private var appModel: AppModel
+    // Observed directly rather than through appModel: this publishes at 1 Hz
+    // and routing it via AppModel re-renders the whole shell every tick (§4.2).
+    @EnvironmentObject private var snapshotStore: ProcessSnapshotStore
     @Environment(\.palette) private var palette
     @StateObject private var viewModel = ProcessesViewModel()
     @FocusState private var searchFocused: Bool
 
-    private var snapshot: ProcessSnapshot? { appModel.snapshotStore.snapshot }
+    private var snapshot: ProcessSnapshot? { snapshotStore.snapshot }
 
     var body: some View {
         VStack(spacing: 0) {
