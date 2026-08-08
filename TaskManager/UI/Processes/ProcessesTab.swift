@@ -165,6 +165,29 @@ struct ProcessesTab: View {
 
             Spacer()
 
+            // Secondary destructive action (SIGKILL): always confirmed via
+            // the pending alert, unlike End task's silent SIGTERM (§3.3).
+            Button {
+                viewModel.forceQuitPending = viewModel.selection
+            } label: {
+                Text("Force Quit")
+                    .font(.system(size: 12, weight: .medium))
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 5)
+                    .background(palette.card)
+                    .foregroundStyle(
+                        viewModel.canEndTask(selection: viewModel.selection, in: snapshot)
+                            ? palette.textPrimary : palette.textSecondary
+                    )
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .strokeBorder(palette.border, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .disabled(!viewModel.canEndTask(selection: viewModel.selection, in: snapshot))
+
             Button {
                 viewModel.endTask(viewModel.selection, in: snapshot)
             } label: {

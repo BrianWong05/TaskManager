@@ -8,11 +8,12 @@ import Testing
 
 @MainActor
 @Suite struct ProcessExpansionTests {
-    private func record(pid: Int32, name: String, bundlePath: String?) -> ProcessRecord {
+    private func record(pid: Int32, name: String, bundlePath: String?,
+                        isProtected: Bool = false) -> ProcessRecord {
         ProcessRecord(
             identity: ProcessIdentity(pid: pid, startUsec: 1),
             name: name, path: "/p\(pid)", bundlePath: bundlePath, uid: 501,
-            userName: "me", ppid: 1, status: .running, isProtected: false,
+            userName: "me", ppid: 1, status: .running, isProtected: isProtected,
             cpuPercent: 0, residentMemory: 0,
             diskReadRate: 0, diskWriteRate: 0, netDownRate: nil, netUpRate: nil,
             detailLevel: .full)
