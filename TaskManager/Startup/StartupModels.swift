@@ -77,11 +77,21 @@ enum BTMParser {
         var identifier: String?
         var disabled: Bool?
 
+        // sfltool dumps one section per UID, and a login item registered for
+        // several users repeats verbatim in each — 166 records but only 91
+        // distinct identifiers on a normal machine. Emitting the repeats gave
+        // the list duplicate SwiftUI ids, which renders as misplaced rows and
+        // large gaps while scrolling. One row per identifier.
+        var seenIdentifiers = Set<String>()
+
         func flush() {
             if let name, !name.isEmpty {
-                records.append(BTMRecord(name: name,
-                                         identifier: identifier ?? name,
-                                         disabled: disabled ?? false))
+                let key = identifier ?? name
+                if seenIdentifiers.insert(key).inserted {
+                    records.append(BTMRecord(name: name,
+                                             identifier: key,
+                                             disabled: disabled ?? false))
+                }
             }
             name = nil
             identifier = nil

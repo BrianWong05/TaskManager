@@ -81,3 +81,34 @@ Name: Legacy Daemon
         #expect(info?.programPath == "")
     }
 }
+
+@Suite struct BTMDeduplicationTests {
+    /// sfltool emits one section per UID, repeating items registered for
+    /// several users. Duplicate ids made SwiftUI misrender the list, so the
+    /// parser keeps one record per identifier.
+    @Test func repeatedIdentifiersAcrossUIDSectionsCollapseToOne() {
+        let dump = """
+        ========================
+         Records for UID 501
+        ========================
+                     Name: Microsoft AutoUpdate
+               Identifier: Microsoft AutoUpdate
+              Disposition: [enabled, allowed, notified]
+
+        ========================
+         Records for UID -2
+        ========================
+                     Name: Microsoft AutoUpdate
+               Identifier: Microsoft AutoUpdate
+              Disposition: [enabled, allowed, notified]
+
+                     Name: Other Item
+               Identifier: com.example.other
+              Disposition: [disabled, allowed, not notified]
+        """
+        let records = BTMParser.parse(dump)
+        #expect(records.count == 2)
+        #expect(records.map(\.identifier) == ["Microsoft AutoUpdate", "com.example.other"])
+        #expect(Set(records.map(\.identifier)).count == records.count)
+    }
+}
