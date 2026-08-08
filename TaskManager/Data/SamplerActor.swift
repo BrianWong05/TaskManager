@@ -208,6 +208,13 @@ actor SamplerActor {
         var byPid: [Int32: TMProcessDetail] = [:]
         for detail in details { byPid[detail.pid] = detail }
 
+        // Command lines are collected here, NOT written into `snapshot` from
+        // inside merge: merge is called as merge(&snapshot.backgroundProcesses[i]),
+        // which holds an exclusive access to `snapshot` for the whole call, so
+        // touching snapshot.elevatedCommandLines in the body is an overlapping
+        // access and traps the exclusivity checker. Apply them after the loops.
+        var filledCommandLines: [Int32: String] = [:]
+
         func merge(_ record: inout ProcessRecord) {
             guard let detail = byPid[record.pid] else { return }
             record.residentMemory = detail.residentMemory
@@ -229,7 +236,7 @@ actor SamplerActor {
             elevatedPrior[record.pid] = (detail.cpuNanoseconds, detail.diskBytesRead,
                                          detail.diskBytesWritten, nowUsec)
             if !detail.commandLine.isEmpty {
-                snapshot.elevatedCommandLines[record.pid] = detail.commandLine
+                filledCommandLines[record.pid] = detail.commandLine
             }
         }
 
@@ -240,6 +247,9 @@ actor SamplerActor {
             for childIndex in snapshot.groups[groupIndex].children.indices {
                 merge(&snapshot.groups[groupIndex].children[childIndex])
             }
+        }
+        for (pid, cmd) in filledCommandLines {
+            snapshot.elevatedCommandLines[pid] = cmd
         }
         // Drop prior counters for pids that no longer need filling.
         for pid in elevatedPrior.keys where byPid[pid] == nil {

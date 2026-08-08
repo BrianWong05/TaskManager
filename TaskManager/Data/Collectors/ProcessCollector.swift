@@ -103,23 +103,29 @@ struct LibProcProcessCollector: ProcessTableCollecting {
     }
 
     /// Name/path/owner for a process whose task info we cannot read
-    /// (cross-user). proc_pidpath works for all processes incl. root's (§5).
+    /// (cross-user). PROC_PIDTBSDINFO also fails cross-user (EPERM), which used
+    /// to drop every root/other-user process from the table entirely — the
+    /// base-first design of §4.4/§4.5 needs them visible with base fields.
+    /// sysctl(KERN_PROC) reads uid/ppid/start/name for ANY pid unprivileged
+    /// (it is how `ps` lists every process), and proc_pidpath supplies the
+    /// full path. Together they are the honest base row; the daemon fills the
+    /// elevation-gated fields later (§4.4).
     private func baseOnlySample(pid: Int32) -> RawProcessSample? {
-        var bsd = proc_bsdinfo()
-        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
-        let got = withUnsafeMutablePointer(to: &bsd) { ptr in
-            proc_pidinfo(pid, PROC_PIDTBSDINFO, 0, ptr, size)
-        }
-        guard got == size else { return nil }
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        var kp = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        let ok = sysctl(&mib, 4, &kp, &size, nil, 0) == 0 && size > 0
+        guard ok else { return nil } // process exited between listpids and now
         let path = processPath(pid: pid)
         return RawProcessSample(
             pid: pid,
-            startUsec: UInt64(bsd.pbi_start_tvsec) * 1_000_000 + UInt64(bsd.pbi_start_tvusec),
-            name: displayName(bsd.pbi_name, path: path, pid: pid),
+            startUsec: UInt64(bitPattern: Int64(kp.kp_proc.p_starttime.tv_sec)) * 1_000_000
+                + UInt64(bitPattern: Int64(kp.kp_proc.p_starttime.tv_usec)),
+            name: displayName(kp.kp_proc.p_comm, path: path, pid: pid),
             path: path,
-            uid: bsd.pbi_uid,
-            ppid: Int32(bsd.pbi_ppid),
-            rawStatus: Int32(bsd.pbi_status),
+            uid: kp.kp_eproc.e_pcred.p_ruid,
+            ppid: kp.kp_eproc.e_ppid,
+            rawStatus: Int32(kp.kp_proc.p_stat),
             cpuNanoseconds: 0,
             residentMemory: 0,
             diskBytesRead: nil,

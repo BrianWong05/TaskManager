@@ -52,24 +52,31 @@ public final class TMProcessDetail: NSObject, NSSecureCoding, @unchecked Sendabl
         self.uid = uid
     }
 
+    // Unsigned values are encoded through their signed bit pattern: NSCoder has
+    // no unsigned overloads, so `encode(uid, …)` would otherwise box a UInt as
+    // an object, and — worse — `UInt32(decodeInt32(…))` traps on any value with
+    // the high bit set. That is not hypothetical: processes owned by `nobody`
+    // have uid 4294967294 (0xFFFFFFFE), which decodes as -2 and crashed the app
+    // the moment cross-user rows were actually filled. bitPattern round-trips
+    // the full unsigned range losslessly and never traps.
     public func encode(with coder: NSCoder) {
         coder.encode(pid, forKey: "pid")
-        coder.encode(residentMemory, forKey: "residentMemory")
-        coder.encode(cpuNanoseconds, forKey: "cpuNanoseconds")
+        coder.encode(Int64(bitPattern: residentMemory), forKey: "residentMemory")
+        coder.encode(Int64(bitPattern: cpuNanoseconds), forKey: "cpuNanoseconds")
         coder.encode(commandLine, forKey: "commandLine")
-        coder.encode(diskBytesRead, forKey: "diskBytesRead")
-        coder.encode(diskBytesWritten, forKey: "diskBytesWritten")
-        coder.encode(uid, forKey: "uid")
+        coder.encode(Int64(bitPattern: diskBytesRead), forKey: "diskBytesRead")
+        coder.encode(Int64(bitPattern: diskBytesWritten), forKey: "diskBytesWritten")
+        coder.encode(Int32(bitPattern: uid), forKey: "uid")
     }
 
     public init?(coder: NSCoder) {
         pid = coder.decodeInt32(forKey: "pid")
-        residentMemory = UInt64(coder.decodeInt64(forKey: "residentMemory"))
-        cpuNanoseconds = UInt64(coder.decodeInt64(forKey: "cpuNanoseconds"))
+        residentMemory = UInt64(bitPattern: coder.decodeInt64(forKey: "residentMemory"))
+        cpuNanoseconds = UInt64(bitPattern: coder.decodeInt64(forKey: "cpuNanoseconds"))
         commandLine = coder.decodeObject(of: NSString.self, forKey: "commandLine") as String? ?? ""
-        diskBytesRead = UInt64(coder.decodeInt64(forKey: "diskBytesRead"))
-        diskBytesWritten = UInt64(coder.decodeInt64(forKey: "diskBytesWritten"))
-        uid = UInt32(coder.decodeInt32(forKey: "uid"))
+        diskBytesRead = UInt64(bitPattern: coder.decodeInt64(forKey: "diskBytesRead"))
+        diskBytesWritten = UInt64(bitPattern: coder.decodeInt64(forKey: "diskBytesWritten"))
+        uid = UInt32(bitPattern: coder.decodeInt32(forKey: "uid"))
     }
 }
 
