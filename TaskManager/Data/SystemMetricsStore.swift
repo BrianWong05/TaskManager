@@ -16,7 +16,13 @@ final class SystemMetricsStore: ObservableObject {
     @Published var diskHistory = RingBuffer<Double>(capacity: SystemMetricsStore.historyCapacity)   // bytes/s
     @Published var netHistory = RingBuffer<Double>(capacity: SystemMetricsStore.historyCapacity)    // bytes/s
     @Published var gpuHistory = RingBuffer<Double>(capacity: SystemMetricsStore.historyCapacity)    // %
+    /// One buffer per logical CPU, sized from the first sample (per-core
+    /// addendum §3) — feeds the Logical processors grid.
+    @Published private(set) var perCoreHistory: [RingBuffer<Double>] = []
     @Published private(set) var latest: SystemSample?
+
+    /// Static core → performance-level map for the grid (addendum §2).
+    let topology: CoreTopology
 
     /// Memory-pressure event badge on the Performance memory card (§3.4).
     /// Cleared automatically after 60 s without a new event.
@@ -25,7 +31,8 @@ final class SystemMetricsStore: ObservableObject {
 
     private let pressureSource: DispatchSourceMemoryPressure
 
-    init() {
+    init(topology: CoreTopology = .current()) {
+        self.topology = topology
         let source = DispatchSource.makeMemoryPressureSource(
             eventMask: [.warning, .critical], queue: .main)
         pressureSource = source
@@ -53,6 +60,15 @@ final class SystemMetricsStore: ObservableObject {
         diskHistory.append(sample.diskReadRate + sample.diskWriteRate)
         netHistory.append(sample.netDownRate + sample.netUpRate)
         gpuHistory.append(sample.gpuUtilization ?? 0)
+
+        if perCoreHistory.count != sample.perCorePercent.count {
+            perCoreHistory = sample.perCorePercent.map { _ in
+                RingBuffer<Double>(capacity: Self.historyCapacity)
+            }
+        }
+        for (core, percent) in sample.perCorePercent.enumerated() {
+            perCoreHistory[core].append(percent)
+        }
 
         // Pressure badge expires after a minute of quiet (spec §3.4 badge).
         if let date = pressureDate, Date().timeIntervalSince(date) > 60 {

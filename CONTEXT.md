@@ -35,3 +35,7 @@ _Avoid_: sudo, admin mode
 **Heat coloring**:
 The three-tier background tint applied to the CPU and Memory columns by usage.
 _Avoid_: color coding, highlighting
+
+**CPU graph mode**:
+The CPU pane's chart selection — Overall utilization (one whole-CPU chart) or Logical processors (a per-core grid) — chosen by a segmented control and remembered across launches.
+_Avoid_: per-core toggle, core view, graph type
