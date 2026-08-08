@@ -37,10 +37,20 @@ struct StartupTab: View {
                 .font(.system(size: 12))
                 .foregroundStyle(palette.textSecondary)
             Spacer()
+            if store.loginItemsMissing {
+                Button("Load Login Items") {
+                    Task { await store.reload(refreshLoginItems: true) }
+                }
+                .font(.system(size: 12))
+                .buttonStyle(.plain)
+                .foregroundStyle(palette.accent)
+                .help("Reads Login Items via sfltool, which asks for your password once.")
+            }
             Button {
-                // User-initiated: re-read Login Items too, accepting the
-                // authorization prompt sfltool triggers.
-                Task { await store.reload(refreshLoginItems: true) }
+                // Deliberately does NOT re-read Login Items: sfltool prompts for
+                // authorization on every run, and Refresh is a frequent action.
+                // Login Items are read once per launch (see StartupStore).
+                Task { await store.reload() }
             } label: {
                 Label("Refresh", systemImage: "arrow.clockwise")
                     .font(.system(size: 12))

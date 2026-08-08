@@ -20,6 +20,12 @@ final class StartupStore: ObservableObject {
     /// once per session and re-read only on explicit Refresh.
     private var cachedBTMItems: [StartupItem]?
 
+    /// False when Login Items could not be read this session — the user
+    /// declined the authorization prompt, or sfltool returned nothing. The tab
+    /// surfaces an explicit "Load Login Items" action in that state rather than
+    /// silently showing an incomplete list.
+    var loginItemsMissing: Bool { cachedBTMItems?.isEmpty ?? false }
+
     init(elevation: ElevationManager) {
         self.elevation = elevation
     }
