@@ -9,3 +9,6 @@ build/
 
 # Swift Package Manager
 .build/
+
+# Local signing identity (Team ID) — never commit
+Local.xcconfig

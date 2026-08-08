@@ -1,0 +1,15 @@
+// Signing configuration (tracked).
+//
+// DEVELOPMENT_TEAM is deliberately NOT committed: a Team ID identifies a
+// specific Apple developer account. Put yours in Local.xcconfig next to this
+// file — it is gitignored:
+//
+//     DEVELOPMENT_TEAM = ABCDE12345
+//
+// Find it with:  security find-identity -v -p codesigning
+// (the value is the certificate's OU field, not the parenthesised name).
+//
+// Without Local.xcconfig the build is ad-hoc signed and still compiles and
+// runs — but Elevation stays permanently degraded, because SMAppService
+// registration requires a real team signature (spec §1, README runbook).
+#include? "Local.xcconfig"

@@ -24,7 +24,23 @@ Shared/             # XPC protocol, compiled into both targets
 
 ## Building
 
-Open `TaskManager/TaskManager.xcodeproj` in Xcode, select your signing team on both targets (Signing & Capabilities → Team), then build the `TaskManager` scheme. Schemes: `TaskManager` (run the app) and `TaskManagerTests` (unit tests).
+Signing is configured through an untracked file, because a Team ID identifies a
+specific Apple developer account. Create `TaskManager/Local.xcconfig`:
+
+```
+DEVELOPMENT_TEAM = ABCDE12345
+```
+
+Find your Team ID with `security find-identity -v -p codesigning` — it is the
+certificate's OU field. `TaskManager/Signing.xcconfig` (tracked) pulls this in
+via `#include?`, so the project still builds without it; the build is then
+ad-hoc signed and **Elevation stays degraded**, since SMAppService registration
+requires a real team signature.
+
+Then open `TaskManager/TaskManager.xcodeproj` and build the `TaskManager`
+scheme. Schemes: `TaskManager` (run the app) and `TaskManagerTests` (unit tests).
+Setting the team in Xcode's Signing & Capabilities tab instead would write it
+back into the project file — put it in `Local.xcconfig`.
 
 ## Re-sign runbook (free personal-team signatures)
 
