@@ -131,7 +131,6 @@ struct PerformanceTab: View {
                 if selected == .cpu, graphMode == .perCore {
                     LogicalProcessorsGrid(
                         topology: systemStore.topology,
-                        histories: systemStore.perCoreHistory,
                         current: systemStore.latest?.perCorePercent ?? []
                     )
                 } else {

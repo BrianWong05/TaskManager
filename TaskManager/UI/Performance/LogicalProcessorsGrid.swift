@@ -1,16 +1,15 @@
 // UI/Performance/LogicalProcessorsGrid.swift
 // The Logical processors CPU graph mode (per-core addendum §1.2): one section
-// per performance level, efficiency first, each an adaptive grid of 0–100 %
-// mini charts with a hover tooltip. Sections share the card's height in
-// proportion to their row counts, as prototyped.
+// per performance level, efficiency first, each an adaptive grid of segment
+// meters. Cells show the *current* value only — no history — so the tile is a
+// stack of lit rungs under a header line carrying the label and the percentage.
 
 import SwiftUI
 
 struct LogicalProcessorsGrid: View {
     @Environment(\.palette) private var palette
     let topology: CoreTopology
-    let histories: [RingBuffer<Double>]
-    /// Latest per-core percentages — cluster averages and tooltips.
+    /// Latest per-core percentages: cells, cluster averages and tooltips.
     let current: [Double]
 
     /// The addendum quotes ≈120 pt, but its reference layout (14 cores:
@@ -57,10 +56,9 @@ struct LogicalProcessorsGrid: View {
                 spacing: cellSpacing
             ) {
                 ForEach(cluster.cores) { core in
-                    CoreChartCell(label: core.label,
-                                  levelName: cluster.name,   // empty on single-level machines
-                                  history: history(core.index),
-                                  current: percent(core.index))
+                    CoreSegmentMeter(label: core.label,
+                                     levelName: cluster.name,   // empty on single-level machines
+                                     percent: percent(core.index))
                         .frame(height: cellHeight)
                 }
             }
@@ -73,11 +71,7 @@ struct LogicalProcessorsGrid: View {
     }
 
     // The topology is read once at startup; a sample that disagrees about the
-    // core count must still render, so every lookup is bounds-checked.
-    private func history(_ index: Int) -> [Double] {
-        histories.indices.contains(index) ? histories[index].values : []
-    }
-
+    // core count must still render, so the lookup is bounds-checked.
     private func percent(_ index: Int) -> Double {
         current.indices.contains(index) ? current[index] : 0
     }
@@ -88,33 +82,76 @@ struct LogicalProcessorsGrid: View {
     }
 }
 
-/// One core's mini chart: fixed 0–100 % scale, corner label, hover tooltip.
-private struct CoreChartCell: View {
+/// How many of `SegmentMeter.count` rungs a percentage lights. Any non-zero
+/// load lights at least one, so a busy core is never drawn idle.
+func litSegments(percent: Double, of count: Int) -> Int {
+    guard percent > 0 else { return 0 }
+    let scaled = Int((percent / 100 * Double(count)).rounded())
+    return min(count, max(1, scaled))
+}
+
+/// One core: a stack of rungs lit to the current value, under a header line.
+private struct CoreSegmentMeter: View {
     @Environment(\.palette) private var palette
     let label: String
     let levelName: String
-    let history: [Double]
-    let current: Double
+    let percent: Double
+
+    static let segmentCount = 10
 
     var body: some View {
-        Sparkline(values: history, domainMax: 100, lineWidth: 1, fill: true)
-            .padding(3)
-            .overlay(alignment: .topLeading) {
-                Text(label)
-                    .font(.system(size: 9))
-                    .foregroundStyle(palette.textSecondary)
-                    .padding(3)
+        let tier = coreHeatTier(percent: percent)
+        let lit = litSegments(percent: percent, of: Self.segmentCount)
+
+        VStack(spacing: 0) {
+            header
+            VStack(spacing: 2) {
+                // Top rung first: index 0 is the highest, so the stack fills up.
+                ForEach(0..<Self.segmentCount, id: \.self) { row in
+                    let rung = Self.segmentCount - 1 - row
+                    RoundedRectangle(cornerRadius: 1, style: .continuous)
+                        // Unlit rungs stay visible — the empty half of the
+                        // stack is what makes it read as a meter.
+                        .fill(rung < lit ? litColor(tier, rung: rung) : palette.border.opacity(0.55))
+                        .frame(maxHeight: .infinity)
+                }
             }
-            .overlay(
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .strokeBorder(palette.border, lineWidth: 1)
-            )
-            .help(tooltip)
+            .padding(EdgeInsets(top: 3, leading: 4, bottom: 4, trailing: 4))
+        }
+        .background(palette.card)
+        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .strokeBorder(palette.border, lineWidth: 1)
+        )
+        .help(tooltip)
+    }
+
+    private var header: some View {
+        HStack(spacing: 4) {
+            Text(label)
+                .font(.system(size: 9))
+                .foregroundStyle(palette.textSecondary)
+            Spacer(minLength: 0)
+            Text("\(Int(percent.rounded())) %")
+                .font(.system(size: 10, weight: .semibold))
+                .monospacedDigit()
+                .foregroundStyle(palette.textPrimary)
+        }
+        .padding(.horizontal, 5)
+        .padding(.top, 3)
+    }
+
+    /// Higher rungs sit at fuller strength, so the stack reads as a climb even
+    /// within one tier.
+    private func litColor(_ tier: HeatTier, rung: Int) -> Color {
+        let ramp = 0.30 + Double(rung) / Double(Self.segmentCount) * 0.62
+        return (tier == .none ? palette.accent : heatBaseColor(tier)).opacity(ramp)
     }
 
     private var tooltip: String {
         levelName.isEmpty
-            ? "\(label) — \(Format.cpu(current))"
-            : "\(label) (\(levelName)) — \(Format.cpu(current))"
+            ? "\(label) — \(Format.cpu(percent))"
+            : "\(label) (\(levelName)) — \(Format.cpu(percent))"
     }
 }
