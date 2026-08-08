@@ -44,7 +44,7 @@ final class DaemonOperations: NSObject, TaskManagerDaemonProtocol {
         return TMProcessDetail(
             pid: pid,
             residentMemory: info.ptinfo.pti_resident_size,
-            cpuNanoseconds: info.ptinfo.pti_total_user &+ info.ptinfo.pti_total_system,
+            cpuNanoseconds: machTimeToNanoseconds(info.ptinfo.pti_total_user &+ info.ptinfo.pti_total_system),
             commandLine: commandLine(for: pid) ?? "",
             diskBytesRead: r > 0 ? rusage.ri_diskio_bytesread : 0,
             diskBytesWritten: r > 0 ? rusage.ri_diskio_byteswritten : 0,

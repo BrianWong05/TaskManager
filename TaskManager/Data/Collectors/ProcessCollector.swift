@@ -95,7 +95,7 @@ struct LibProcProcessCollector: ProcessTableCollecting {
             uid: bsd.pbi_uid,
             ppid: Int32(bsd.pbi_ppid),
             rawStatus: Int32(bsd.pbi_status),
-            cpuNanoseconds: info.ptinfo.pti_total_user &+ info.ptinfo.pti_total_system,
+            cpuNanoseconds: machTimeToNanoseconds(info.ptinfo.pti_total_user &+ info.ptinfo.pti_total_system),
             residentMemory: info.ptinfo.pti_resident_size,
             diskBytesRead: r > 0 ? rusage.ri_diskio_bytesread : nil,
             diskBytesWritten: r > 0 ? rusage.ri_diskio_byteswritten : nil

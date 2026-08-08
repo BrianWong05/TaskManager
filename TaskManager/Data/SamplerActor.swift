@@ -280,7 +280,7 @@ actor SamplerActor {
         }
         let nowUsec = UInt64(Date().timeIntervalSince1970 * 1_000_000)
         guard got == size else { return }
-        let cpuNS = task.pti_total_user &+ task.pti_total_system
+        let cpuNS = machTimeToNanoseconds(task.pti_total_user &+ task.pti_total_system)
         defer { ownPriorCPU = (cpuNS, nowUsec) }
         guard let prior = ownPriorCPU, nowUsec > prior.usec else { return }
         let dtSeconds = Double(nowUsec - prior.usec) / 1_000_000
