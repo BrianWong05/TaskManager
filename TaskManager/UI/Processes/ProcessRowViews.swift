@@ -120,6 +120,12 @@ private struct GroupRow: View {
                 }
             }
             .disabled(!group.children.contains { !$0.isProtected })
+            Button("Force Quit all in group…") {
+                // Confirmation flows through the same pending alert as single
+                // rows; forceQuit(.group) then SIGKILLs every unprotected child.
+                viewModel.forceQuitPending = .group(bundlePath: group.bundlePath)
+            }
+            .disabled(!group.children.contains { !$0.isProtected })
             Divider()
             Button("Show Details") {
                 onSelect()
