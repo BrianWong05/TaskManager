@@ -68,7 +68,9 @@ private struct GroupRow: View {
                     Image(systemName: expanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(palette.textSecondary)
-                        .frame(width: 12)
+                        // 20pt frame is the click target; nothing is drawn around it.
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 Image(nsImage: IconCache.shared.icon(forBundlePath: group.bundlePath))
@@ -168,7 +170,7 @@ private struct ProcessRow: View {
                     Image(nsImage: IconCache.shared.icon(forBundlePath: record.bundlePath))
                         .resizable()
                         .frame(width: 16, height: 16)
-                        .padding(.leading, 22)
+                        .padding(.leading, 30)
                 } else {
                     Image(systemName: "gearshape")
                         .font(.system(size: 12))
