@@ -43,11 +43,11 @@ final class DaemonOperations: NSObject, TaskManagerDaemonProtocol {
 
         return TMProcessDetail(
             pid: pid,
-            residentMemory: info.ptinfo.pti_resident_size,
+            residentMemory: r == 0 ? rusage.ri_phys_footprint : info.ptinfo.pti_resident_size,
             cpuNanoseconds: machTimeToNanoseconds(info.ptinfo.pti_total_user &+ info.ptinfo.pti_total_system),
             commandLine: commandLine(for: pid) ?? "",
-            diskBytesRead: r > 0 ? rusage.ri_diskio_bytesread : 0,
-            diskBytesWritten: r > 0 ? rusage.ri_diskio_byteswritten : 0,
+            diskBytesRead: r == 0 ? rusage.ri_diskio_bytesread : 0,
+            diskBytesWritten: r == 0 ? rusage.ri_diskio_byteswritten : 0,
             uid: info.pbsd.pbi_uid
         )
     }

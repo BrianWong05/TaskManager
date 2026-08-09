@@ -27,7 +27,14 @@ struct MemoryRaw: Sendable {
     var free: UInt64
     var compressed: UInt64
     var swapUsed: UInt64
+    var swapTotal: UInt64 = 0
     var totalPhysical: UInt64
+
+    /// ≥90% swap used — the state where the system's out-of-memory dialog
+    /// fires. Drives the Processes-tab early-warning notice.
+    var swapNearlyFull: Bool {
+        swapTotal > 0 && Double(swapUsed) / Double(swapTotal) >= 0.9
+    }
 }
 
 struct DiskRawTotals: Sendable, Equatable {

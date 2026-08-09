@@ -20,6 +20,9 @@ struct ProcessesTab: View {
     // Observed directly rather than through appModel: this publishes at 1 Hz
     // and routing it via AppModel re-renders the whole shell every tick (§4.2).
     @EnvironmentObject private var snapshotStore: ProcessSnapshotStore
+    // Safe to observe here: this tab already re-renders at 1 Hz via
+    // snapshotStore, so the systemStore tick adds no extra invalidation.
+    @EnvironmentObject private var systemStore: SystemMetricsStore
     @Environment(\.palette) private var palette
     @StateObject private var viewModel = ProcessesViewModel()
     @FocusState private var searchFocused: Bool
@@ -32,6 +35,9 @@ struct ProcessesTab: View {
             toolbar
             if snapshot?.networkDegraded == true {
                 networkDegradedNotice
+            }
+            if let memory = systemStore.latest?.memory, memory.swapNearlyFull {
+                swapPressureNotice(memory)
             }
             Divider().overlay(palette.border)
             columnHeader
@@ -196,6 +202,24 @@ struct ProcessesTab: View {
         .onAppear {
             viewModel.elevation = appModel.elevation
         }
+    }
+
+    /// Swap ≥90% full — the state where macOS shows its out-of-memory
+    /// dialog. The Memory column (phys_footprint) already counts compressed
+    /// and swapped memory, so it names the culprits; warn before the system
+    /// dialog does.
+    private func swapPressureNotice(_ memory: MemoryRaw) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 10))
+            Text("Swap nearly full (\(Format.bytes(memory.swapUsed)) of \(Format.bytes(memory.swapTotal))) — the system is running out of application memory. Consider quitting the largest apps in the Memory column.")
+                .font(.system(size: 11))
+            Spacer()
+        }
+        .foregroundStyle(palette.textSecondary)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 4)
+        .background(palette.subdued)
     }
 
     /// nettop failed 3+ ticks in a row (spec §4.5): system-wide network
