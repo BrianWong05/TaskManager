@@ -46,6 +46,8 @@ struct ProcessRecord: Identifiable, Sendable, Equatable {
 
     /// Normalized to all cores: one fully busy core == 1.0 (spec §4.1).
     var cpuPercent: Double
+    /// Memory footprint (phys_footprint: dirty + compressed + swapped);
+    /// resident_size fallback when rusage is unreadable.
     var residentMemory: UInt64
     var diskReadRate: Double    // bytes/s
     var diskWriteRate: Double   // bytes/s
@@ -54,6 +56,9 @@ struct ProcessRecord: Identifiable, Sendable, Equatable {
     var netUpRate: Double?      // bytes/s
 
     var detailLevel: ProcessDetailLevel
+    /// Process macOS holds responsible for this one (responsibility SPI);
+    /// nil when self-responsible. Groups bundle-less helpers under their app.
+    var responsiblePid: Int32? = nil
 
     var id: ProcessIdentity { identity }
     var pid: Int32 { identity.pid }

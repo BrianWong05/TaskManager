@@ -194,11 +194,11 @@ private struct ProcessDetailView: View {
                 InspectorSectionDivider("Extended")
 
                 if viewModel.requiresElevation(record) {
-                    InspectorField("Memory RSS", "Requires elevation")
+                    InspectorField("Memory", "Requires elevation")
                     InspectorField("Command line", "Requires elevation")
                     InspectorField("Disk I/O", "Requires elevation")
                 } else {
-                    InspectorField("Memory RSS", Format.bytes(record.residentMemory))
+                    InspectorField("Memory", Format.bytes(record.residentMemory))
                     InspectorField("Command line", resolvedCommandLine(record) ?? "—", multiline: true)
                     InspectorField("Disk I/O",
                                    "Read \(Format.rate(record.diskReadRate)) · Write \(Format.rate(record.diskWriteRate))")

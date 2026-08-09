@@ -91,7 +91,8 @@ struct ProcessTableReducer {
                 diskWriteRate: diskWriteRate,
                 netDownRate: netAvailable ? netDown : nil,
                 netUpRate: netAvailable ? netUp : nil,
-                detailLevel: detailLevel
+                detailLevel: detailLevel,
+                responsiblePid: sample.responsiblePid
             ))
         }
 
@@ -104,11 +105,20 @@ struct ProcessTableReducer {
     }
 
     /// Groups records into App Groups + flat background section (spec §3.3).
+    /// A bundle-less record adopts its responsible process's bundle — e.g.
+    /// Safari Web Content (lives in WebKit.framework, no .app in its path)
+    /// groups under Safari, matching the system's attribution.
     static func snapshot(from records: [ProcessRecord], totalMemoryBytes: UInt64, coreCount: Int) -> ProcessSnapshot {
+        var bundleByPid: [Int32: String] = [:]
+        for record in records {
+            if let bundle = record.bundlePath { bundleByPid[record.pid] = bundle }
+        }
         var byBundle: [String: [ProcessRecord]] = [:]
         var background: [ProcessRecord] = []
         for record in records {
-            if let bundle = record.bundlePath {
+            let bundle = record.bundlePath
+                ?? record.responsiblePid.flatMap { bundleByPid[$0] }
+            if let bundle {
                 byBundle[bundle, default: []].append(record)
             } else {
                 background.append(record)

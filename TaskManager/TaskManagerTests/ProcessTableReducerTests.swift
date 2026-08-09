@@ -9,10 +9,12 @@ import Testing
 private func sample(pid: Int32, startUsec: UInt64 = 1_000_000, name: String = "proc",
                      path: String = "/usr/local/bin/proc", uid: UInt32 = 501,
                      cpuNS: UInt64 = 0, rss: UInt64 = 0,
-                     diskRead: UInt64? = nil, diskWritten: UInt64? = nil) -> RawProcessSample {
+                     diskRead: UInt64? = nil, diskWritten: UInt64? = nil,
+                     responsiblePid: Int32? = nil) -> RawProcessSample {
     RawProcessSample(pid: pid, startUsec: startUsec, name: name, path: path,
                      uid: uid, ppid: 1, rawStatus: 2, cpuNanoseconds: cpuNS,
-                     residentMemory: rss, diskBytesRead: diskRead, diskBytesWritten: diskWritten)
+                     residentMemory: rss, diskBytesRead: diskRead, diskBytesWritten: diskWritten,
+                     responsiblePid: responsiblePid)
 }
 
 @Suite struct ProcessTableReducerTests {
@@ -92,6 +94,26 @@ private func sample(pid: Int32, startUsec: UInt64 = 1_000_000, name: String = "p
         #expect(group.totalMemory == 4000)
         #expect(snapshot.backgroundProcesses.count == 1)
         #expect(snapshot.processCount == 3)
+    }
+
+    /// Bundle-less helpers group under the app responsible for them — the
+    /// Safari Web Content case (lives in WebKit.framework, no .app in path).
+    @Test func bundleLessHelperGroupsUnderResponsibleApp() {
+        var reducer = ProcessTableReducer(currentUid: 501)
+        let snapshot = reducer.update(samples: [
+            sample(pid: 10, name: "Safari", path: "/Applications/Safari.app/Contents/MacOS/Safari"),
+            sample(pid: 11, name: "com.apple.WebKit.WebContent",
+                   path: "/System/Library/Frameworks/WebKit.framework/XPCServices/WC",
+                   rss: 3000, responsiblePid: 10),
+            // Responsible process vanished / unknown pid → stays background.
+            sample(pid: 12, name: "orphan", path: "/usr/libexec/orphan", responsiblePid: 999),
+        ], net: nil, nowUsec: 0, coreCount: 8, totalMemoryBytes: 1)
+
+        #expect(snapshot.groups.count == 1)
+        #expect(snapshot.groups[0].bundlePath == "/Applications/Safari.app")
+        #expect(snapshot.groups[0].children.count == 2)
+        #expect(snapshot.groups[0].totalMemory == 3000)
+        #expect(snapshot.backgroundProcesses.map(\.pid) == [12])
     }
 
     // MARK: Detail gating

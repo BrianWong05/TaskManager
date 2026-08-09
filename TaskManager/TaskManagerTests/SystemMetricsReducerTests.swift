@@ -14,6 +14,22 @@ private func ticks(user: UInt64, system: UInt64, idle: UInt64, nice: UInt64 = 0,
     CPURawTicks(user: user, system: system, idle: idle, nice: nice, perCore: perCore)
 }
 
+@Suite struct SwapNearlyFullTests {
+    private func memory(swapUsed: UInt64, swapTotal: UInt64) -> MemoryRaw {
+        MemoryRaw(wired: 0, active: 0, inactive: 0, free: 0, compressed: 0,
+                  swapUsed: swapUsed, swapTotal: swapTotal, totalPhysical: 1000)
+    }
+
+    /// Notice threshold is 90% of swap; zero total (swap disabled or sysctl
+    /// failure) must never trigger it.
+    @Test func triggersAtNinetyPercentAndNotOnZeroTotal() {
+        #expect(!memory(swapUsed: 89, swapTotal: 100).swapNearlyFull)
+        #expect(memory(swapUsed: 90, swapTotal: 100).swapNearlyFull)
+        #expect(memory(swapUsed: 100, swapTotal: 100).swapNearlyFull)
+        #expect(!memory(swapUsed: 0, swapTotal: 0).swapNearlyFull)
+    }
+}
+
 @Suite struct SystemMetricsReducerTests {
     @Test func cpuPercentFromTickDeltas() {
         var reducer = SystemMetricsReducer()

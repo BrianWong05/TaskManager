@@ -34,5 +34,8 @@ import Foundation
         let mine = samples.filter { $0.uid == getuid() }
         #expect(!mine.isEmpty)
         #expect(mine.contains { $0.residentMemory > 0 })
+        // proc_pid_rusage succeeds same-user (returns 0 — a `> 0` success
+        // check once left the disk columns and footprint permanently dead).
+        #expect(mine.contains { $0.diskBytesRead != nil })
     }
 }

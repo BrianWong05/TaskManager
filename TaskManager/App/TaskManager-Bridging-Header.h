@@ -9,3 +9,9 @@
 #include <sys/types.h>
 #include <signal.h>
 #include <utmpx.h>
+
+// SPI (libSystem, stable since 10.14): the process macOS holds responsible
+// for `pid` — e.g. Safari for a com.apple.WebKit.WebContent helper. Same
+// attribution Activity Monitor and the out-of-memory dialog use. Returns the
+// pid itself for self-responsible processes, -1 on failure.
+extern pid_t responsibility_get_pid_responsible_for_pid(pid_t pid);

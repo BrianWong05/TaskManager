@@ -24,7 +24,8 @@ public final class TMProcessDetail: NSObject, NSSecureCoding, @unchecked Sendabl
     public static var supportsSecureCoding: Bool { true }
 
     @objc public let pid: Int32
-    /// Resident memory in bytes (resident_size; phys_footprint needs task ports, spec §4.5).
+    /// Memory footprint in bytes (ri_phys_footprint; resident_size fallback).
+    /// Key name kept as "residentMemory" for wire compatibility (spec §4.5).
     @objc public let residentMemory: UInt64
     /// Cumulative CPU time in nanoseconds (for rate computation by the app).
     @objc public let cpuNanoseconds: UInt64

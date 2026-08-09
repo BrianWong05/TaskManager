@@ -16,11 +16,16 @@ struct RawProcessSample: Sendable {
     let rawStatus: Int32
     /// Cumulative CPU time, user + system, nanoseconds (proc_taskallinfo).
     let cpuNanoseconds: UInt64
-    /// resident_size (spec §4.5 — phys_footprint needs task ports).
+    /// ri_phys_footprint (dirty + compressed + swapped — matches Activity
+    /// Monitor's Memory column and the system OOM dialog); falls back to
+    /// resident_size when proc_pid_rusage is unreadable.
     let residentMemory: UInt64
     /// Cumulative disk I/O (proc_pid_rusage); nil when EPERM (cross-user).
     let diskBytesRead: UInt64?
     let diskBytesWritten: UInt64?
+    /// Responsible process (responsibility SPI); nil when self-responsible
+    /// or unavailable. Drives App Grouping of bundle-less helpers.
+    var responsiblePid: Int32? = nil
 }
 
 /// Mock seam for the process table (spec §8).
@@ -75,7 +80,7 @@ struct LibProcProcessCollector: ProcessTableCollecting {
 
         let bsd = info.pbsd
         let path = processPath(pid: pid)
-        // proc_pid_rusage: cross-user returns <= 0 (EPERM).
+        // proc_pid_rusage: 0 on success, -1 on failure (EPERM cross-user).
         // NOTE: the C signature `rusage_info_t *buffer` is misleading — the
         // kernel treats the pointer VALUE itself as the output buffer. Swift
         // imports it as a pointer-to-pointer, so passing `&ptr` lets the
@@ -96,9 +101,10 @@ struct LibProcProcessCollector: ProcessTableCollecting {
             ppid: Int32(bsd.pbi_ppid),
             rawStatus: Int32(bsd.pbi_status),
             cpuNanoseconds: machTimeToNanoseconds(info.ptinfo.pti_total_user &+ info.ptinfo.pti_total_system),
-            residentMemory: info.ptinfo.pti_resident_size,
-            diskBytesRead: r > 0 ? rusage.ri_diskio_bytesread : nil,
-            diskBytesWritten: r > 0 ? rusage.ri_diskio_byteswritten : nil
+            residentMemory: r == 0 ? rusage.ri_phys_footprint : info.ptinfo.pti_resident_size,
+            diskBytesRead: r == 0 ? rusage.ri_diskio_bytesread : nil,
+            diskBytesWritten: r == 0 ? rusage.ri_diskio_byteswritten : nil,
+            responsiblePid: responsiblePid(of: pid)
         )
     }
 
@@ -129,8 +135,17 @@ struct LibProcProcessCollector: ProcessTableCollecting {
             cpuNanoseconds: 0,
             residentMemory: 0,
             diskBytesRead: nil,
-            diskBytesWritten: nil
+            diskBytesWritten: nil,
+            responsiblePid: responsiblePid(of: pid)
         )
+    }
+
+    /// nil when self-responsible or the SPI fails, so grouping falls back to
+    /// the process's own bundle. ponytail: one syscall per pid per tick, no
+    /// cache — cache by identity if profiling ever flags it.
+    private func responsiblePid(of pid: Int32) -> Int32? {
+        let responsible = responsibility_get_pid_responsible_for_pid(pid)
+        return responsible > 0 && responsible != pid ? responsible : nil
     }
 
     private func processPath(pid: Int32) -> String {

@@ -95,6 +95,7 @@ struct SystemMetricsCollector: SystemMetricsCollecting {
             free: UInt64(stats.free_count) * pageSize,
             compressed: UInt64(stats.compressor_page_count) * pageSize,
             swapUsed: swapOK ? swap.xsu_used : 0,
+            swapTotal: swapOK ? swap.xsu_total : 0,
             totalPhysical: UInt64(ProcessInfo.processInfo.physicalMemory)
         )
     }
