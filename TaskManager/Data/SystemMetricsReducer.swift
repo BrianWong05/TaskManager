@@ -65,8 +65,3 @@ struct SystemMetricsReducer {
         return Double(now - before) / dt
     }
 }
-
-/// "In use" memory for headline display: wired + active + compressed.
-func memoryInUse(_ memory: MemoryRaw) -> UInt64 {
-    memory.wired &+ memory.active &+ memory.compressed
-}

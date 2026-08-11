@@ -39,3 +39,19 @@ _Avoid_: color coding, highlighting
 **CPU graph mode**:
 The CPU pane's chart selection — Overall utilization (one whole-CPU chart) or Logical processors (a per-core grid) — chosen by a segmented control and remembered across launches.
 _Avoid_: per-core toggle, core view, graph type
+
+**In use**:
+The share of physical memory that cannot be reclaimed without swapping — App memory, Wired memory and Compressed together. The headline value of the Performance memory pane.
+_Avoid_: memory used, used memory, active memory
+
+**Memory composition**:
+The three parts In use divides into: App memory (allocated by running applications), Wired memory (kernel-owned pages that can never be swapped), and Compressed (pages the kernel has compressed in place rather than swapped).
+_Avoid_: memory breakdown, memory detail
+
+**Cached files**:
+File-backed and purgeable pages the kernel holds speculatively — a subset of Available, reclaimed on demand without swapping.
+_Avoid_: cache, buffers, inactive memory
+
+**Available**:
+Physical memory that is not In use — everything the system can still hand to a new allocation, Cached files included.
+_Avoid_: free memory, unused memory

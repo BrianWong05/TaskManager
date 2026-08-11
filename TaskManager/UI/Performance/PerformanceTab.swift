@@ -151,8 +151,26 @@ struct PerformanceTab: View {
     }
 
     private var statGrid: some View {
-        let stats = statItems(for: selected)
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), alignment: .leading)], spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            statRow(statItems(for: selected))
+            // The three parts In use divides into get their own block: the
+            // adaptive grid is only three columns wide at the default window
+            // size, so relying on row order to group them doesn't survive.
+            if selected == .memory, let memory = systemStore.latest?.memory {
+                Text("Memory composition")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(palette.textSecondary)
+                statRow([
+                    ("App memory", Format.bytes(memory.app)),
+                    ("Wired memory", Format.bytes(memory.wired)),
+                    ("Compressed", Format.bytes(memory.compressed)),
+                ])
+            }
+        }
+    }
+
+    private func statRow(_ stats: [(label: String, value: String)]) -> some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), alignment: .leading)], spacing: 8) {
             ForEach(stats, id: \.label) { stat in
                 VStack(alignment: .leading, spacing: 1) {
                     Text(stat.label)
@@ -192,7 +210,7 @@ struct PerformanceTab: View {
         case .cpu:
             return Format.cpu(sample.cpuPercent)
         case .memory:
-            return "\(Format.bytes(memoryInUse(sample.memory))) of \(Format.bytes(sample.memory.totalPhysical))"
+            return "\(Format.bytes(sample.memory.inUse)) of \(Format.bytes(sample.memory.totalPhysical))"
         case .disk:
             return Format.rate(sample.diskReadRate + sample.diskWriteRate)
         case .network:
@@ -218,10 +236,13 @@ struct PerformanceTab: View {
                 ("Up time", upTime),
             ]
         case .memory:
+            // Cached files sits directly after Available because it is a
+            // subset of it; the composition parts live in their own block.
             let memory = sample.memory
             return [
-                ("In use", Format.bytes(memoryInUse(memory))),
-                ("Available", Format.bytes(memory.free &+ memory.inactive)),
+                ("In use", Format.bytes(memory.inUse)),
+                ("Available", Format.bytes(memory.available)),
+                ("Cached files", Format.bytes(memory.cached)),
                 ("Capacity", Format.bytes(memory.totalPhysical)),
                 ("Swap used", Format.bytes(memory.swapUsed)),
             ]
