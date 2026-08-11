@@ -6,8 +6,8 @@ import Testing
 import Foundation
 @testable import TaskManager
 
-private let memory = MemoryRaw(wired: 100, active: 200, inactive: 50, free: 300,
-                               compressed: 100, swapUsed: 0, totalPhysical: 1000)
+private let memory = MemoryRaw(wired: 100, app: 200, compressed: 100,
+                               cached: 300, swapUsed: 0, totalPhysical: 1000)
 
 private func ticks(user: UInt64, system: UInt64, idle: UInt64, nice: UInt64 = 0,
                    perCore: [(user: UInt64, system: UInt64, idle: UInt64, nice: UInt64)] = []) -> CPURawTicks {
@@ -16,7 +16,7 @@ private func ticks(user: UInt64, system: UInt64, idle: UInt64, nice: UInt64 = 0,
 
 @Suite struct SwapNearlyFullTests {
     private func memory(swapUsed: UInt64, swapTotal: UInt64) -> MemoryRaw {
-        MemoryRaw(wired: 0, active: 0, inactive: 0, free: 0, compressed: 0,
+        MemoryRaw(wired: 0, app: 0, compressed: 0, cached: 0,
                   swapUsed: swapUsed, swapTotal: swapTotal, totalPhysical: 1000)
     }
 
@@ -85,7 +85,12 @@ private func ticks(user: UInt64, system: UInt64, idle: UInt64, nice: UInt64 = 0,
         #expect(sample == nil)
     }
 
-    @Test func memoryInUseIsWiredActiveCompressed() {
-        #expect(memoryInUse(memory) == 400)
+    /// Both halves of the Activity Monitor model (ADR 0001): In use is exactly
+    /// its three displayed parts, and Available is whatever is left of
+    /// capacity — so the Performance stat row always adds up.
+    @Test func inUseIsItsPartsAndAvailableIsTheRemainder() {
+        #expect(memory.inUse == 400)
+        #expect(memory.inUse == memory.app &+ memory.wired &+ memory.compressed)
+        #expect(memory.inUse &+ memory.available == memory.totalPhysical)
     }
 }

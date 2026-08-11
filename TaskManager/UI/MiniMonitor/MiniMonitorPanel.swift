@@ -51,7 +51,7 @@ struct MiniMonitorPanel: View {
 
     private var memoryValue: String {
         guard let memory = systemStore.latest?.memory else { return "–" }
-        return "\(Format.bytes(memoryInUse(memory))) / \(Format.bytes(memory.totalPhysical))"
+        return "\(Format.bytes(memory.inUse)) / \(Format.bytes(memory.totalPhysical))"
     }
 
     private func metricsCard(title: String, value: String, history: [Double], domainMax: Double) -> some View {

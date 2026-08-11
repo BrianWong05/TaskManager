@@ -52,7 +52,7 @@ final class SystemMetricsStore: ObservableObject {
         latest = sample
         cpuHistory.append(sample.cpuPercent)
         let total = sample.memory.totalPhysical
-        let inUseShare = total > 0 ? Double(memoryInUse(sample.memory)) / Double(total) * 100 : 0
+        let inUseShare = total > 0 ? Double(sample.memory.inUse) / Double(total) * 100 : 0
         memoryHistory.append(inUseShare)
         diskHistory.append(sample.diskReadRate + sample.diskWriteRate)
         netHistory.append(sample.netDownRate + sample.netUpRate)

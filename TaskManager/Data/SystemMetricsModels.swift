@@ -20,15 +20,24 @@ struct CPURawTicks: Sendable, Equatable {
     }
 }
 
+/// Memory buckets in bytes, following Activity Monitor's model (ADR 0001).
 struct MemoryRaw: Sendable {
     var wired: UInt64
-    var active: UInt64
-    var inactive: UInt64
-    var free: UInt64
+    var app: UInt64
     var compressed: UInt64
+    var cached: UInt64
     var swapUsed: UInt64
     var swapTotal: UInt64 = 0
     var totalPhysical: UInt64
+
+    /// Memory that cannot be reclaimed without swapping — the Performance
+    /// pane's headline, and the % recorded in the memory history.
+    var inUse: UInt64 { app &+ wired &+ compressed }
+
+    /// A residual, never a sum: the kernel buckets physical memory into more
+    /// categories than we surface, so deriving this by subtraction is what
+    /// keeps `inUse + available == totalPhysical` true (ADR 0001).
+    var available: UInt64 { totalPhysical > inUse ? totalPhysical - inUse : 0 }
 
     /// ≥90% swap used — the state where the system's out-of-memory dialog
     /// fires. Drives the Processes-tab early-warning notice.

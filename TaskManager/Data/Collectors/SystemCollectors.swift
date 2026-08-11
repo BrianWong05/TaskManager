@@ -88,12 +88,19 @@ struct SystemMetricsCollector: SystemMetricsCollecting {
         var mib: [Int32] = [CTL_VM, VM_SWAPUSAGE]
         let swapOK = sysctl(&mib, 2, &swap, &size, nil, 0) == 0
 
+        // Activity Monitor's buckets (ADR 0001). Purgeable pages are a subset
+        // of internal ones, and move from App memory to Cached files.
+        // free_count is deliberately unused — `available` is a residual, and
+        // free_count already includes speculative_count (vm_statistics.h),
+        // which vm_stat(1)'s "Pages free" subtracts back out.
+        let purgeable = UInt64(stats.purgeable_count) * pageSize
+        let anonymous = UInt64(stats.internal_page_count) * pageSize
+
         return MemoryRaw(
             wired: UInt64(stats.wire_count) * pageSize,
-            active: UInt64(stats.active_count) * pageSize,
-            inactive: UInt64(stats.inactive_count) * pageSize,
-            free: UInt64(stats.free_count) * pageSize,
+            app: anonymous > purgeable ? anonymous - purgeable : 0,
             compressed: UInt64(stats.compressor_page_count) * pageSize,
+            cached: UInt64(stats.external_page_count) * pageSize &+ purgeable,
             swapUsed: swapOK ? swap.xsu_used : 0,
             swapTotal: swapOK ? swap.xsu_total : 0,
             totalPhysical: UInt64(ProcessInfo.processInfo.physicalMemory)
